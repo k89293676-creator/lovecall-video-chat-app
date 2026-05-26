@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useLocation } from 'wouter';
 import { useRoomStore } from '@/store/room-store';
 import { usePeer } from '@/hooks/use-peer';
-import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Copy, Check } from 'lucide-react';
+import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Copy, Check, Camera, Maximize, Minimize } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Toolbox } from '@/components/Toolbox';
@@ -11,9 +11,16 @@ import { ModeParticles } from '@/components/ModeParticles';
 import { PrivacyMode } from '@/components/PrivacyMode';
 import { RippleCanvas } from '@/components/RippleCanvas';
 import { AchievementToast } from '@/components/AchievementToast';
+import { EmojiReactions } from '@/components/EmojiReactions';
 import { buildFilterStyle } from '@/components/VideoFilter';
 import { getModeConfig } from '@/lib/modes';
 import { checkAndUnlock } from '@/lib/achievements';
+
+interface FloatingReaction {
+  id: string;
+  emoji: string;
+  x: number;
+}
 
 export default function Room() {
   const { id } = useParams<{ id: string }>();
@@ -22,12 +29,16 @@ export default function Room() {
   const { sendMessage } = usePeer(id);
   const [copied, setCopied] = useState(false);
   const [pendingAchievement, setPendingAchievement] = useState<{ title: string; emoji: string; description?: string } | null>(null);
+  const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [captureFlash, setCaptureFlash] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
 
   const modeConfig = getModeConfig(store.mode);
-  const filterStyle = buildFilterStyle(store.videoFilter, store.brightness, store.warmth);
+  const filterStyle = buildFilterStyle(store.videoFilter, store.brightness, store.warmth, store.contrast);
 
   useEffect(() => {
     if (localVideoRef.current && store.localStream) {
@@ -48,6 +59,18 @@ export default function Room() {
     }
   }, [store.connectionStatus]);
 
+  // Handle incoming reactions from peer
+  useEffect(() => {
+    const handler = (e: CustomEvent<{ emoji: string }>) => {
+      const id2 = `${Date.now()}-${Math.random()}`;
+      const x = 55 + Math.random() * 15;
+      setFloatingReactions(f => [...f, { id: id2, emoji: e.detail.emoji, x }]);
+      setTimeout(() => setFloatingReactions(f => f.filter(r => r.id !== id2)), 3000);
+    };
+    window.addEventListener('peer-reaction' as any, handler as any);
+    return () => window.removeEventListener('peer-reaction' as any, handler as any);
+  }, []);
+
   const handleAchievement = useCallback((ach: { title: string; emoji: string }) => {
     setPendingAchievement(ach);
   }, []);
@@ -63,9 +86,60 @@ export default function Room() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const capturePhoto = useCallback(() => {
+    const video = store.remoteStream ? remoteVideoRef.current : localVideoRef.current;
+    if (!video) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const link = document.createElement('a');
+    link.download = `moonlight-${Date.now()}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    setCaptureFlash(true);
+    setTimeout(() => setCaptureFlash(false), 500);
+  }, [store.remoteStream]);
+
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      rootRef.current?.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handler = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handler);
+    return () => document.removeEventListener('fullscreenchange', handler);
+  }, []);
+
+  // Wrap sendMessage to also dispatch peer-reaction for incoming
+  const wrappedSend = useCallback((data: unknown) => {
+    sendMessage(data);
+  }, [sendMessage]);
+
   return (
-    <div className={`relative w-full h-[100dvh] overflow-hidden flex items-center justify-center ${modeConfig.bgClass}`}>
-      
+    <div ref={rootRef} className={`relative w-full h-[100dvh] overflow-hidden flex items-center justify-center ${modeConfig.bgClass}`}>
+
+      {/* Camera flash overlay */}
+      {captureFlash && (
+        <div className="absolute inset-0 z-[100] bg-white pointer-events-none capture-flash" />
+      )}
+
+      {/* Floating peer reactions */}
+      {floatingReactions.map(r => (
+        <div key={r.id} className="fixed z-50 pointer-events-none select-none text-4xl animate-float-up"
+          style={{ left: `${r.x}%`, bottom: '8rem' }}>
+          {r.emoji}
+        </div>
+      ))}
+
       <ModeParticles mode={store.mode} active={true} />
 
       {/* Remote Video (Background) */}
@@ -104,9 +178,10 @@ export default function Room() {
       </div>
 
       <CanvasOverlay />
-      <RippleCanvas onAchievement={handleAchievement} sendMessage={sendMessage} />
+      <RippleCanvas onAchievement={handleAchievement} sendMessage={wrappedSend} />
       <PrivacyMode />
-      <Toolbox onAchievement={handleAchievement} sendMessage={sendMessage} />
+      <Toolbox onAchievement={handleAchievement} sendMessage={wrappedSend} />
+      <EmojiReactions sendMessage={wrappedSend} />
       <AchievementToast achievement={pendingAchievement} onDone={() => setPendingAchievement(null)} />
 
       {/* Local Video (PIP) */}
@@ -137,7 +212,7 @@ export default function Room() {
       </div>
 
       {/* Control Bar (Bottom) */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 glass-panel rounded-full px-6 py-3 flex items-center gap-4 shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 glass-panel rounded-full px-6 py-3 flex items-center gap-3 shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="ghost" size="icon"
@@ -175,6 +250,32 @@ export default function Room() {
           </TooltipTrigger>
           <TooltipContent><p>End Call</p></TooltipContent>
         </Tooltip>
+
+        <div className="w-px h-8 bg-white/10 mx-1" />
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon"
+              className="rounded-full w-12 h-12 hover:bg-white/10 text-white/60 hover:text-white"
+              onClick={capturePhoto}
+            >
+              <Camera className="w-5 h-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent><p>Capture Photo</p></TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon"
+              className="rounded-full w-12 h-12 hover:bg-white/10 text-white/60 hover:text-white"
+              onClick={toggleFullscreen}
+            >
+              {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent><p>{isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}</p></TooltipContent>
+        </Tooltip>
       </div>
 
       {/* Status bar */}
@@ -186,11 +287,27 @@ export default function Room() {
             <>
               <span className="text-white/20">|</span>
               <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
-              <span>Live</span>
+              <span className="text-green-400/70">Live</span>
+            </>
+          )}
+          {store.connectionStatus === 'connecting' && (
+            <>
+              <span className="text-white/20">|</span>
+              <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse"></div>
+              <span className="text-yellow-400/70">Connecting…</span>
             </>
           )}
         </div>
       </div>
+
+      {/* Drawing mode indicator */}
+      {store.isDrawingMode && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30">
+          <div className="glass-panel px-4 py-1.5 rounded-full text-xs text-primary font-medium flex items-center gap-2 animate-pulse">
+            <span>✏️</span> Drawing Mode — Ctrl+Z to undo
+          </div>
+        </div>
+      )}
     </div>
   );
 }

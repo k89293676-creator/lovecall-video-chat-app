@@ -11,6 +11,9 @@ export interface Ripple {
   timestamp: number;
 }
 
+export type DrawTool = 'pen' | 'eraser' | 'spray' | 'neon' | 'stamp';
+export type DrawAction = 'undo' | 'redo' | 'clear' | 'save' | null;
+
 interface RoomState {
   peer: Peer | null;
   localStream: MediaStream | null;
@@ -27,12 +30,17 @@ interface RoomState {
   videoFilter: string;
   brightness: number;
   warmth: number;
+  contrast: number;
   ripples: Ripple[];
   activeSoundscapes: string[];
   unlockedAchievements: string[];
   isDrawingMode: boolean;
   drawColor: string;
   drawSize: number;
+  drawTool: DrawTool;
+  drawOpacity: number;
+  stampEmoji: string;
+  drawAction: DrawAction;
 
   setPeer: (peer: Peer | null) => void;
   setLocalStream: (stream: MediaStream | null) => void;
@@ -50,6 +58,7 @@ interface RoomState {
   setVideoFilter: (filter: string) => void;
   setBrightness: (v: number) => void;
   setWarmth: (v: number) => void;
+  setContrast: (v: number) => void;
   addRipple: (ripple: Ripple) => void;
   removeRipple: (id: string) => void;
   toggleSoundscape: (id: string) => void;
@@ -57,6 +66,11 @@ interface RoomState {
   setDrawingMode: (v: boolean) => void;
   setDrawColor: (c: string) => void;
   setDrawSize: (s: number) => void;
+  setDrawTool: (t: DrawTool) => void;
+  setDrawOpacity: (v: number) => void;
+  setStampEmoji: (e: string) => void;
+  triggerDrawAction: (action: 'undo' | 'redo' | 'clear' | 'save') => void;
+  clearDrawAction: () => void;
 }
 
 export const useRoomStore = create<RoomState>((set, get) => ({
@@ -75,12 +89,17 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   videoFilter: 'none',
   brightness: 100,
   warmth: 0,
+  contrast: 100,
   ripples: [],
   activeSoundscapes: [],
   unlockedAchievements: [],
   isDrawingMode: false,
   drawColor: '#e11d48',
   drawSize: 4,
+  drawTool: 'pen',
+  drawOpacity: 90,
+  stampEmoji: '❤️',
+  drawAction: null,
 
   setPeer: (peer) => set({ peer }),
   setLocalStream: (stream) => set({ localStream: stream }),
@@ -127,6 +146,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   setVideoFilter: (filter) => set({ videoFilter: filter }),
   setBrightness: (brightness) => set({ brightness }),
   setWarmth: (warmth) => set({ warmth }),
+  setContrast: (contrast) => set({ contrast }),
 
   addRipple: (ripple) => set((s) => ({ ripples: [...s.ripples, ripple].slice(-20) })),
   removeRipple: (id) => set((s) => ({ ripples: s.ripples.filter((r) => r.id !== id) })),
@@ -148,4 +168,9 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   setDrawingMode: (v) => set({ isDrawingMode: v }),
   setDrawColor: (c) => set({ drawColor: c }),
   setDrawSize: (s) => set({ drawSize: s }),
+  setDrawTool: (t) => set({ drawTool: t }),
+  setDrawOpacity: (v) => set({ drawOpacity: v }),
+  setStampEmoji: (e) => set({ stampEmoji: e }),
+  triggerDrawAction: (action) => set({ drawAction: action }),
+  clearDrawAction: () => set({ drawAction: null }),
 }));

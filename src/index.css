@@ -170,6 +170,26 @@
   animation: achievement-slide 4s ease-in-out forwards;
 }
 
+@keyframes float-up {
+  0%   { transform: translateY(0) scale(1);    opacity: 1; }
+  60%  { transform: translateY(-120px) scale(1.3); opacity: 0.9; }
+  100% { transform: translateY(-220px) scale(0.8); opacity: 0; }
+}
+
+.animate-float-up {
+  animation: float-up 3s ease-out forwards;
+}
+
+@keyframes capture-flash {
+  0%   { opacity: 0; }
+  20%  { opacity: 0.8; }
+  100% { opacity: 0; }
+}
+
+.capture-flash {
+  animation: capture-flash 0.5s ease-out forwards;
+}
+
 .mode-romance { --mode-primary: 348 83% 47%; --mode-glow: rgba(225,29,72,0.4); }
 .mode-playful { --mode-primary: 270 70% 60%; --mode-glow: rgba(139,92,246,0.4); }
 .mode-chill   { --mode-primary: 210 70% 50%; --mode-glow: rgba(59,130,246,0.4); }

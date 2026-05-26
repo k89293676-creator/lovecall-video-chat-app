@@ -72,26 +72,48 @@ export function GestureIndicator({ gesture }: Props) {
   const desc  = EFFECT_DESC[displayed];
 
   return (
-    <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none">
+    <div className="fixed top-[72px] left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none">
       {/* Main indicator */}
       {visible && displayed !== 'none' && (
         <div
           key={animKey}
-          className={`flex items-center gap-3 px-5 py-2.5 rounded-2xl border backdrop-blur-lg shadow-2xl animate-in fade-in zoom-in-90 duration-200 ${color}`}
+          className={`flex items-center gap-3 animate-in fade-in zoom-in-90 duration-200 ${color}`}
+          style={{
+            padding: '10px 20px',
+            borderRadius: 20,
+            backdropFilter: 'blur(20px) saturate(1.6)',
+            border: '1px solid currentColor',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+            opacity: 0.92,
+          }}
         >
-          <span className="text-2xl leading-none">{emoji}</span>
-          <div className="flex flex-col">
-            <span className="text-sm font-bold tracking-wide leading-tight">{label}</span>
-            {desc && <span className="text-[10px] opacity-60 leading-tight mt-0.5">{desc}</span>}
+          <span className="text-[22px] leading-none">{emoji}</span>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[13px] font-bold tracking-wide leading-none">{label}</span>
+            {desc && (
+              <span className="text-[10px] leading-tight" style={{ opacity: 0.55 }}>{desc}</span>
+            )}
           </div>
         </div>
       )}
 
       {/* Gesture history strip */}
       {history.length > 1 && (
-        <div className="flex items-center gap-1 bg-black/30 backdrop-blur-md rounded-full px-3 py-1 border border-white/10">
+        <div
+          className="flex items-center gap-1.5 px-3 py-1.5"
+          style={{
+            background: 'rgba(0,0,0,0.38)',
+            backdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255,255,255,0.09)',
+            borderRadius: 99,
+          }}
+        >
           {history.slice(1).map((h, i) => (
-            <span key={h.ts} className="text-base leading-none" style={{ opacity: 0.7 - i * 0.15 }}>
+            <span
+              key={h.ts}
+              className="text-[15px] leading-none"
+              style={{ opacity: Math.max(0.12, 0.65 - i * 0.16) }}
+            >
               {GESTURE_EMOJI[h.name]}
             </span>
           ))}

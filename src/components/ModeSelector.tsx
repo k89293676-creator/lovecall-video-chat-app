@@ -37,31 +37,39 @@ export function ModeSelector({ onClose, onAchievement }: ModeSelectorProps) {
         Switch mode to change AR effects &amp; vibe
       </p>
       <div className="grid grid-cols-2 gap-2">
-        {MODES.map((m) => (
-          <button
-            key={m.id}
-            onClick={() => handleSelect(m.id)}
-            className={cn(
-              'flex flex-col items-start gap-1 p-3 rounded-xl border transition-all duration-200',
-              mode === m.id
-                ? 'bg-white/15 border-white/30 shadow-inner'
-                : 'bg-black/30 border-white/5 hover:bg-white/10 hover:border-white/20'
-            )}
-          >
-            <span className="text-2xl">{m.emoji}</span>
-            <span className="text-xs font-semibold text-white">{m.name}</span>
-            <span className="text-[10px] text-white/40 leading-tight">{m.description}</span>
-            {m.autoEffects.length > 0 && (
-              <div className="flex flex-wrap gap-0.5 mt-0.5">
-                {m.autoEffects.slice(0, 2).map(e => (
-                  <span key={e} className="text-[8px] px-1 py-0.5 rounded bg-white/10 text-white/40">
-                    {e.replace('filter_', '')}
-                  </span>
-                ))}
-              </div>
-            )}
-          </button>
-        ))}
+        {MODES.map((m) => {
+          const isActive = mode === m.id;
+          return (
+            <button
+              key={m.id}
+              onClick={() => handleSelect(m.id)}
+              className="flex flex-col items-start gap-1 p-3 rounded-xl transition-all duration-200"
+              style={{
+                background: isActive ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.3)',
+                border: `1px solid ${isActive ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.06)'}`,
+                boxShadow: isActive ? `0 0 18px ${m.glowColor?.replace(',0.4',',0.25')}` : 'none',
+                transform: isActive ? 'scale(1.02)' : 'scale(1)',
+              }}
+            >
+              <span className="text-2xl leading-none">{m.emoji}</span>
+              <span className={`text-xs font-semibold mt-0.5 ${isActive ? 'text-white' : 'text-white/80'}`}>{m.name}</span>
+              <span className="text-[10px] text-white/38 leading-tight">{m.description}</span>
+              {m.autoEffects.length > 0 && (
+                <div className="flex flex-wrap gap-0.5 mt-1">
+                  {m.autoEffects.slice(0, 2).map(e => (
+                    <span
+                      key={e}
+                      className="text-[8px] px-1.5 py-0.5 rounded-full text-white/40"
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}
+                    >
+                      {e.replace('filter_', '')}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

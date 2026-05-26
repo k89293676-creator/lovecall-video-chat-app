@@ -308,125 +308,191 @@ export default function Room() {
 
       {/* Local Video PIP */}
       <div
-        className="absolute bottom-24 right-6 w-32 h-48 md:w-44 md:h-64 bg-black rounded-2xl overflow-hidden shadow-2xl z-20 group transition-transform hover:scale-105"
-        style={{ border:`1px solid ${modeConfig.primaryColor}30`, boxShadow:`0 0 20px ${modeConfig.glowColor}` }}
+        className="absolute bottom-[88px] right-6 z-20 group transition-all duration-300 hover:scale-105"
+        style={{
+          width: 128, height: 192,
+          borderRadius: 20,
+          overflow: 'hidden',
+          border: `1.5px solid ${modeConfig.primaryColor}35`,
+          boxShadow: `0 8px 32px rgba(0,0,0,0.55), 0 0 24px ${modeConfig.glowColor}`,
+        }}
       >
         {store.localStream ? (
           <video
             ref={localVideoRef} autoPlay playsInline muted
             className="w-full h-full object-cover scale-x-[-1]"
-            style={{ filter: filterStyle!=='none' ? filterStyle : undefined }}
+            style={{ filter: filterStyle !== 'none' ? filterStyle : undefined }}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-zinc-900">
-            <VideoOff className="w-8 h-8 text-white/30" />
+          <div className="w-full h-full flex items-center justify-center bg-zinc-950">
+            <VideoOff className="w-8 h-8 text-white/25" />
           </div>
         )}
-        <div className="absolute bottom-2 left-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          {!store.audioEnabled && <div className="bg-black/50 p-1.5 rounded-md backdrop-blur-sm"><MicOff className="w-3.5 h-3.5 text-destructive"/></div>}
-          {!store.videoEnabled && <div className="bg-black/50 p-1.5 rounded-md backdrop-blur-sm"><VideoOff className="w-3.5 h-3.5 text-destructive"/></div>}
+
+        {/* Top status badge */}
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <div
+            className="px-1.5 py-0.5 rounded-full text-[11px] font-medium"
+            style={{
+              background: 'rgba(0,0,0,0.55)',
+              backdropFilter: 'blur(8px)',
+              border: '1px solid rgba(255,255,255,0.12)',
+            }}
+          >
+            {modeConfig.emoji}
+          </div>
         </div>
-        <div className="absolute top-2 right-2 text-sm opacity-0 group-hover:opacity-100 transition-opacity">{modeConfig.emoji}</div>
+
+        {/* Bottom status indicators */}
+        <div className="absolute bottom-2 left-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          {!store.audioEnabled && (
+            <div
+              className="p-1 rounded-lg"
+              style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.1)' }}
+            >
+              <MicOff className="w-3 h-3 text-red-400" />
+            </div>
+          )}
+          {!store.videoEnabled && (
+            <div
+              className="p-1 rounded-lg"
+              style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.1)' }}
+            >
+              <VideoOff className="w-3 h-3 text-red-400" />
+            </div>
+          )}
+        </div>
+
+        {/* Motion glow */}
         {store.motionData && store.gestureMode && (
-          <div className="absolute inset-0 pointer-events-none rounded-2xl"
-            style={{ boxShadow:`inset 0 0 ${Math.round(store.motionData.area*40+4)}px ${modeConfig.primaryColor}60`, opacity:store.motionData.area*5 }} />
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              borderRadius: 20,
+              boxShadow: `inset 0 0 ${Math.round(store.motionData.area * 40 + 4)}px ${modeConfig.primaryColor}55`,
+              opacity: store.motionData.area * 5,
+            }}
+          />
         )}
       </div>
 
       {/* Bottom control bar */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 glass-panel rounded-full px-6 py-3 flex items-center gap-3 shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon"
-              className={`rounded-full w-12 h-12 ${!store.audioEnabled?'bg-destructive/20 text-destructive hover:bg-destructive/30':'hover:bg-white/10 text-white'}`}
-              onClick={store.toggleAudio}>
-              {store.audioEnabled?<Mic className="w-5 h-5"/>:<MicOff className="w-5 h-5"/>}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent><p>{store.audioEnabled?'Mute (K)':'Unmute (K)'}</p></TooltipContent>
-        </Tooltip>
+      <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30">
+        <div
+          className="glass-panel-strong flex items-center gap-1.5 px-4 py-3 rounded-2xl shadow-[0_16px_48px_rgba(0,0,0,0.55)]"
+          style={{ border: '1px solid rgba(255,255,255,0.1)' }}
+        >
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={store.toggleAudio}
+                className={`ctrl-btn ${!store.audioEnabled ? 'danger' : ''}`}
+                style={!store.audioEnabled ? { width: 48, height: 48, borderRadius: 14 } : {}}
+              >
+                {store.audioEnabled ? <Mic className="w-[18px] h-[18px]" /> : <MicOff className="w-[18px] h-[18px]" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent><p>{store.audioEnabled ? 'Mute (K)' : 'Unmute (K)'}</p></TooltipContent>
+          </Tooltip>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon"
-              className={`rounded-full w-12 h-12 ${!store.videoEnabled?'bg-destructive/20 text-destructive hover:bg-destructive/30':'hover:bg-white/10 text-white'}`}
-              onClick={store.toggleVideo}>
-              {store.videoEnabled?<VideoIcon className="w-5 h-5"/>:<VideoOff className="w-5 h-5"/>}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent><p>{store.videoEnabled?'Stop Video (V)':'Start Video (V)'}</p></TooltipContent>
-        </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={store.toggleVideo}
+                className={`ctrl-btn ${!store.videoEnabled ? 'danger' : ''}`}
+                style={!store.videoEnabled ? { width: 48, height: 48, borderRadius: 14 } : {}}
+              >
+                {store.videoEnabled ? <VideoIcon className="w-[18px] h-[18px]" /> : <VideoOff className="w-[18px] h-[18px]" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent><p>{store.videoEnabled ? 'Stop Video (V)' : 'Start Video (V)'}</p></TooltipContent>
+          </Tooltip>
 
-        <div className="w-px h-8 bg-white/10 mx-1" />
+          <div className="w-px h-6 bg-white/10 mx-1" />
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon"
-              className={`rounded-full w-12 h-12 transition-all ${showVibes?'bg-primary/20 text-primary shadow-[0_0_12px_rgba(225,29,72,0.4)]':'hover:bg-white/10 text-white/60 hover:text-white'}`}
-              onClick={()=>setShowVibes(v=>!v)}>
-              <Sparkles className="w-5 h-5"/>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent><p>AR Vibes</p></TooltipContent>
-        </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => setShowVibes(v => !v)}
+                className={`ctrl-btn ${showVibes ? 'active' : ''}`}
+              >
+                <Sparkles className="w-[18px] h-[18px]" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent><p>AR Vibes</p></TooltipContent>
+          </Tooltip>
 
-        <div className="w-px h-8 bg-white/10 mx-1" />
+          <div className="w-px h-6 bg-white/10 mx-1" />
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="destructive" size="icon"
-              className="rounded-full w-14 h-14 shadow-lg shadow-destructive/20 hover:shadow-destructive/40 hover:scale-105 transition-all"
-              onClick={handleDisconnect}>
-              <PhoneOff className="w-6 h-6"/>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent><p>End Call</p></TooltipContent>
-        </Tooltip>
+          {/* End call — center focal button */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={handleDisconnect}
+                className="relative flex items-center justify-center w-[52px] h-[52px] rounded-[16px] transition-all duration-200 hover:scale-[1.06] active:scale-[0.95]"
+                style={{
+                  background: 'linear-gradient(135deg, hsl(0 84% 55%) 0%, hsl(0 84% 45%) 100%)',
+                  boxShadow: '0 4px 20px rgba(239,68,68,0.45), 0 0 0 1px rgba(255,255,255,0.1) inset',
+                }}
+              >
+                <PhoneOff className="w-5 h-5 text-white" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent><p>End Call</p></TooltipContent>
+          </Tooltip>
 
-        <div className="w-px h-8 bg-white/10 mx-1" />
+          <div className="w-px h-6 bg-white/10 mx-1" />
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon"
-              className="rounded-full w-12 h-12 hover:bg-white/10 text-white/60 hover:text-white"
-              onClick={capturePhoto}>
-              <Camera className="w-5 h-5"/>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent><p>Capture Photo</p></TooltipContent>
-        </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button onClick={capturePhoto} className="ctrl-btn">
+                <Camera className="w-[18px] h-[18px]" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent><p>Capture Photo</p></TooltipContent>
+          </Tooltip>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon"
-              className="rounded-full w-12 h-12 hover:bg-white/10 text-white/60 hover:text-white"
-              onClick={toggleFullscreen}>
-              {isFullscreen?<Minimize className="w-5 h-5"/>:<Maximize className="w-5 h-5"/>}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent><p>{isFullscreen?'Exit Fullscreen (F)':'Fullscreen (F)'}</p></TooltipContent>
-        </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button onClick={toggleFullscreen} className="ctrl-btn">
+                {isFullscreen ? <Minimize className="w-[18px] h-[18px]" /> : <Maximize className="w-[18px] h-[18px]" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent><p>{isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}</p></TooltipContent>
+          </Tooltip>
+        </div>
       </div>
 
       {/* Status bar */}
-      <div className="absolute top-4 right-4 z-30 flex items-center gap-2">
-        <div className="glass-panel px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs text-white/40">
-          <span className="text-base">{modeConfig.emoji}</span>
-          <span>{modeConfig.moodLabel}</span>
-          {store.connectionStatus==='connected' && (
+      <div className="absolute top-4 right-4 z-30">
+        <div
+          className="glass-panel flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs"
+          style={{ border: '1px solid rgba(255,255,255,0.09)' }}
+        >
+          <span className="text-base leading-none">{modeConfig.emoji}</span>
+          <span className="text-white/45 font-medium">{modeConfig.moodLabel}</span>
+
+          {store.connectionStatus === 'connected' && (
             <>
-              <span className="text-white/20">|</span>
-              <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${qualityCfg.dot}`} />
-              <span className={qualityCfg.color}>
-                {qualityCfg.label || 'Live'}
-              </span>
+              <div className="w-px h-3.5 bg-white/15" />
+              <div className="flex items-center gap-1.5">
+                <div
+                  className={`w-1.5 h-1.5 rounded-full ${qualityCfg.dot}`}
+                  style={{ boxShadow: `0 0 6px currentColor`, animation: 'soft-pulse 2s ease-in-out infinite' }}
+                />
+                <span className={`${qualityCfg.color} font-semibold`}>
+                  {qualityCfg.label || 'Live'}
+                </span>
+              </div>
             </>
           )}
-          {store.connectionStatus==='connecting' && (
+          {store.connectionStatus === 'connecting' && (
             <>
-              <span className="text-white/20">|</span>
-              <div className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
-              <span className="text-yellow-400/70">Connecting…</span>
+              <div className="w-px h-3.5 bg-white/15" />
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-soft-pulse" />
+                <span className="text-yellow-400/80 font-medium">Connecting…</span>
+              </div>
             </>
           )}
         </div>
@@ -435,13 +501,21 @@ export default function Room() {
       {/* Drawing mode hint */}
       {store.isDrawingMode && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
-          <div className="glass-panel px-4 py-1.5 rounded-full text-xs text-primary font-medium flex items-center gap-2">
-            <span>✏️</span> Drawing Mode — Ctrl+Z undo · D to toggle
+          <div
+            className="glass-panel px-4 py-2 rounded-full text-xs font-semibold flex items-center gap-2"
+            style={{
+              color: 'hsl(var(--primary))',
+              border: '1px solid hsl(var(--primary) / 0.3)',
+              boxShadow: '0 0 16px hsl(var(--primary) / 0.2)',
+            }}
+          >
+            <span>✏️</span>
+            Drawing Mode
+            <span className="text-white/30 font-normal">· Ctrl+Z undo · D to stop</span>
           </div>
         </div>
       )}
 
-      {/* Keyboard shortcuts hint (shows briefly on first load) */}
       <KeyboardHint />
     </div>
   );
@@ -455,12 +529,22 @@ function KeyboardHint() {
   }, []);
   if (!visible) return null;
   return (
-    <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-20 pointer-events-none animate-in fade-in duration-1000">
-      <div className="glass-panel px-4 py-2 rounded-full text-[10px] text-white/30 flex items-center gap-3">
-        <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded text-white/40">K</kbd> mic</span>
-        <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded text-white/40">V</kbd> video</span>
-        <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded text-white/40">D</kbd> draw</span>
-        <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded text-white/40">F</kbd> fullscreen</span>
+    <div className="absolute bottom-[88px] left-1/2 -translate-x-1/2 z-20 pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-700">
+      <div
+        className="glass-panel px-4 py-2 rounded-full text-[10px] text-white/28 flex items-center gap-3"
+        style={{ border: '1px solid rgba(255,255,255,0.07)' }}
+      >
+        {[['K','mic'],['V','video'],['D','draw'],['F','fullscreen']].map(([key, label]) => (
+          <span key={key} className="flex items-center gap-1">
+            <kbd
+              className="inline-flex items-center justify-center w-5 h-5 rounded text-[9px] font-bold text-white/50"
+              style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)' }}
+            >
+              {key}
+            </kbd>
+            {label}
+          </span>
+        ))}
       </div>
     </div>
   );

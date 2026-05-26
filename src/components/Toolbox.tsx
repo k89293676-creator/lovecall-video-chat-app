@@ -40,36 +40,113 @@ export function Toolbox({ onAchievement, sendMessage }: ToolboxProps) {
 
   return (
     <div className="absolute top-1/2 -translate-y-1/2 left-4 z-40 flex items-start gap-3">
-      <div className="glass-panel rounded-2xl p-2 flex flex-col gap-1.5 shadow-2xl">
-        {tabs.map((tab) => (
-          <Button key={tab.id} variant="ghost" size="icon"
-            onClick={() => setActiveTab(activeTab === tab.id ? null : tab.id)}
-            className={`w-11 h-11 rounded-xl transition-all duration-300 ${activeTab === tab.id ? 'bg-primary/20 text-primary shadow-[0_0_12px_rgba(225,29,72,0.4)]' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
-            title={tab.label}
-          >
-            {tab.icon}
-          </Button>
-        ))}
-        <div className="w-full h-px bg-white/10 my-0.5" />
-        <Button variant="ghost" size="icon"
+      {/* Sidebar rail */}
+      <div
+        className="flex flex-col gap-1 p-1.5 shadow-2xl"
+        style={{
+          background: 'rgba(8,6,16,0.72)',
+          backdropFilter: 'blur(24px) saturate(1.6)',
+          border: '1px solid rgba(255,255,255,0.09)',
+          borderRadius: 18,
+          boxShadow: '0 12px 40px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)',
+        }}
+      >
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(isActive ? null : tab.id)}
+              title={tab.label}
+              className="relative w-11 h-11 flex items-center justify-center rounded-[13px] transition-all duration-200"
+              style={{
+                background: isActive ? 'hsl(var(--primary) / 0.2)' : 'transparent',
+                color: isActive ? 'hsl(var(--primary))' : 'rgba(255,255,255,0.5)',
+                border: `1px solid ${isActive ? 'hsl(var(--primary) / 0.4)' : 'transparent'}`,
+                boxShadow: isActive ? '0 0 14px hsl(var(--primary) / 0.3)' : 'none',
+                transform: isActive ? 'scale(1.05)' : 'scale(1)',
+              }}
+              onMouseEnter={e => {
+                if (!isActive) {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                  e.currentTarget.style.color = 'rgba(255,255,255,0.85)';
+                }
+              }}
+              onMouseLeave={e => {
+                if (!isActive) {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = 'rgba(255,255,255,0.5)';
+                }
+              }}
+            >
+              {tab.icon}
+              {/* Active dot */}
+              {isActive && (
+                <div
+                  className="absolute -right-0.5 top-1/2 -translate-y-1/2 w-1 h-4 rounded-full"
+                  style={{ background: 'hsl(var(--primary))', boxShadow: '0 0 6px hsl(var(--primary))' }}
+                />
+              )}
+            </button>
+          );
+        })}
+
+        <div
+          className="mx-2 my-0.5"
+          style={{ height: 1, background: 'rgba(255,255,255,0.08)' }}
+        />
+
+        <button
           onClick={togglePrivacyMode}
-          className="w-11 h-11 rounded-xl text-white/50 hover:text-white hover:bg-white/10"
           title="Privacy Mode (Ctrl+P)"
+          className="w-11 h-11 flex items-center justify-center rounded-[13px] transition-all duration-200"
+          style={{ color: 'rgba(255,255,255,0.38)' }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.38)'; }}
         >
           <EyeOff className="w-5 h-5" />
-        </Button>
+        </button>
       </div>
 
+      {/* Panel */}
       {activeTab && (
-        <div className="glass-panel w-72 max-h-[80vh] rounded-2xl flex flex-col overflow-hidden animate-in slide-in-from-left-4 fade-in duration-300">
-          <div className="p-4 border-b border-white/10 flex items-center justify-between bg-black/20 flex-shrink-0">
-            <h3 className="text-sm font-serif font-semibold text-white tracking-wide">
-              {tabs.find(t => t.id === activeTab)?.label}
-            </h3>
-            <Button variant="ghost" size="icon" className="w-7 h-7 rounded-full text-white/50 hover:text-white hover:bg-white/10" onClick={() => setActiveTab(null)}>
-              <X className="w-3.5 h-3.5" />
-            </Button>
+        <div
+          className="w-72 max-h-[80vh] flex flex-col overflow-hidden animate-in slide-in-from-left-4 fade-in duration-250"
+          style={{
+            background: 'rgba(8,6,16,0.78)',
+            backdropFilter: 'blur(28px) saturate(1.7)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: 20,
+            boxShadow: '0 16px 50px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)',
+          }}
+        >
+          {/* Panel header */}
+          <div
+            className="px-4 py-3 flex items-center justify-between flex-shrink-0"
+            style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.18)' }}
+          >
+            <div className="flex items-center gap-2.5">
+              <div
+                className="w-6 h-6 flex items-center justify-center rounded-lg"
+                style={{ background: 'hsl(var(--primary) / 0.18)', border: '1px solid hsl(var(--primary) / 0.3)', color: 'hsl(var(--primary))' }}
+              >
+                <span className="scale-75">{tabs.find(t => t.id === activeTab)?.icon}</span>
+              </div>
+              <h3 className="text-[13px] font-serif font-semibold text-white tracking-wide">
+                {tabs.find(t => t.id === activeTab)?.label}
+              </h3>
+            </div>
+            <button
+              onClick={() => setActiveTab(null)}
+              className="w-6 h-6 rounded-full flex items-center justify-center transition-all"
+              style={{ color: 'rgba(255,255,255,0.35)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'rgba(255,255,255,0.8)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.35)'; }}
+            >
+              <X className="w-3 h-3" />
+            </button>
           </div>
+
           <ScrollArea className="flex-1 p-4">
             {activeTab === 'mode'    && <ModeSelector onClose={() => setActiveTab(null)} onAchievement={onAchievement} />}
             {activeTab === 'ar'      && <ARSection onAchievement={onAchievement} />}

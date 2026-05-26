@@ -5,6 +5,7 @@ export interface MediaError {
   description: string;
   canRetry: boolean;
   browserHint?: string;
+  steps?: string[];
 }
 
 export interface AcquiredMedia {
@@ -13,7 +14,6 @@ export interface AcquiredMedia {
   hasAudio: boolean;
 }
 
-// Ordered fallback constraint sets — widest to narrowest
 const CONSTRAINT_SETS: MediaStreamConstraints[] = [
   { video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true },
   { video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: true },
@@ -33,18 +33,49 @@ export function getBrowserName(): string {
   return 'your browser';
 }
 
-export function getPermissionBrowserHint(browser: string): string {
+export function isIOS(): boolean {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+export function getPermissionSteps(browser: string): string[] {
+  if (isIOS()) {
+    return [
+      'Tap the "AA" icon (or 🔒) in the Safari address bar',
+      'Tap "Website Settings"',
+      'Set Camera → Allow and Microphone → Allow',
+      'Tap Done, then tap Try Again below',
+    ];
+  }
   switch (browser) {
     case 'Chrome':
     case 'Chromium':
     case 'Edge':
-      return 'Click the camera/lock icon in the address bar → Allow camera and microphone → Reload.';
+      return [
+        'Click the 🔒 lock icon in your address bar',
+        'Set Camera → Allow and Microphone → Allow',
+        'Click Try Again below',
+      ];
     case 'Firefox':
-      return 'Click the camera icon in the address bar → Remove blocked permission → Reload.';
+      return [
+        'Click the camera 🎥 icon in the address bar',
+        'Click "Remove blocked permissions"',
+        'Click Try Again below',
+      ];
     case 'Safari':
-      return 'Go to Safari → Settings → Websites → Camera (and Microphone) → set this site to Allow.';
+      return [
+        'Open Safari → Settings → Websites',
+        'Tap Camera → set this site to Allow',
+        'Tap Microphone → set this site to Allow',
+        'Come back and tap Try Again',
+      ];
     default:
-      return 'Check your browser settings to allow camera and microphone access, then reload.';
+      return [
+        'Open your browser settings',
+        'Find Camera and Microphone permissions',
+        'Allow access for this site',
+        'Click Try Again below',
+      ];
   }
 }
 
@@ -59,22 +90,24 @@ export function classifyError(err: unknown): MediaError {
     case 'PermissionDeniedError':
       return {
         title: 'Access Denied',
-        description: 'Camera and microphone access was blocked by the browser.',
-        canRetry: false,
-        browserHint: getPermissionBrowserHint(browser),
+        description: isIOS()
+          ? 'Camera or microphone access was blocked. Follow the steps below to allow access in Safari, then tap Try Again.'
+          : 'Camera or microphone access was blocked. Follow the steps below to allow access, then click Try Again.',
+        canRetry: true,
+        steps: getPermissionSteps(browser),
       };
     case 'NotFoundError':
     case 'DevicesNotFoundError':
       return {
         title: 'No Device Found',
-        description: 'No camera or microphone was detected on this device.',
+        description: 'No camera or microphone was detected on this device. Connect a device and try again.',
         canRetry: true,
       };
     case 'NotReadableError':
     case 'TrackStartError':
       return {
         title: 'Device Busy',
-        description: 'Your camera or microphone is being used by another application (e.g. Zoom, Teams). Close other video apps and try again.',
+        description: 'Your camera or microphone is being used by another app. Close other video apps (Zoom, Teams, FaceTime) and try again.',
         canRetry: true,
       };
     case 'OverconstrainedError':
@@ -87,31 +120,24 @@ export function classifyError(err: unknown): MediaError {
     case 'SecurityError':
       return {
         title: 'Insecure Connection',
-        description: 'Camera access requires HTTPS. Please open this app over a secure connection.',
+        description: 'Camera access requires HTTPS. Please open this app over a secure (https://) connection.',
         canRetry: false,
       };
     case 'AbortError':
       return {
-        title: 'Access Aborted',
-        description: 'Camera/microphone access was interrupted. Please try again.',
-        canRetry: true,
-      };
-    case 'TypeError':
-      return {
-        title: 'Configuration Error',
-        description: 'Invalid media constraints. Please try again.',
+        title: 'Access Interrupted',
+        description: 'Camera access was interrupted. Please try again.',
         canRetry: true,
       };
     default:
       return {
-        title: 'Media Error',
+        title: 'Camera Error',
         description: err.message || 'Could not access camera or microphone.',
         canRetry: true,
       };
   }
 }
 
-/** Try multiple constraint sets from widest to narrowest until one works. */
 export async function getUserMediaSafe(): Promise<AcquiredMedia> {
   let lastError: unknown;
   for (const constraints of CONSTRAINT_SETS) {
@@ -125,14 +151,12 @@ export async function getUserMediaSafe(): Promise<AcquiredMedia> {
     } catch (err) {
       lastError = err;
       const info = classifyError(err);
-      // If denied or security error, stop immediately — retrying won't help
       if (!info.canRetry) throw err;
     }
   }
   throw lastError;
 }
 
-/** Re-acquire media with a specific deviceId (for device switching). */
 export async function getUserMediaWithDevices(
   videoDeviceId?: string,
   audioDeviceId?: string,
@@ -144,20 +168,17 @@ export async function getUserMediaWithDevices(
     ? { deviceId: { exact: audioDeviceId } }
     : true;
 
-  const constraints: MediaStreamConstraints = {
-    video: videoConstraint,
-    audio: audioConstraint,
-  };
-
   try {
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: videoConstraint,
+      audio: audioConstraint,
+    });
     return {
       stream,
       hasVideo: stream.getVideoTracks().length > 0,
       hasAudio: stream.getAudioTracks().length > 0,
     };
   } catch {
-    // Fall back to default
     return getUserMediaSafe();
   }
 }
@@ -167,7 +188,6 @@ export interface DeviceList {
   microphones: MediaDeviceInfo[];
 }
 
-/** Enumerate available devices. Returns labelled lists only after permission is granted. */
 export async function enumerateDevices(): Promise<DeviceList> {
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
@@ -180,7 +200,6 @@ export async function enumerateDevices(): Promise<DeviceList> {
   }
 }
 
-/** Check permission state without triggering a prompt. Returns 'unsupported' in Safari < 16. */
 export async function queryPermission(name: 'camera' | 'microphone'): Promise<PermissionStatus> {
   try {
     const result = await navigator.permissions.query({ name: name as PermissionName });

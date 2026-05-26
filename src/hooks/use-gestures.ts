@@ -107,8 +107,8 @@ export function detectGesture(landmarks: Landmark[]): GestureResult {
     return { name: 'peace', confidence: 0.88 };
   }
 
-  // ── Rock on: index+pinky, middle+ring curled ──
-  if (index && !middle && !ring && pinky) {
+  // ── Rock on: index+pinky, middle+ring curled, thumb tucked ──
+  if (index && !middle && !ring && pinky && !thumb) {
     return { name: 'rock_on', confidence: 0.86 };
   }
 

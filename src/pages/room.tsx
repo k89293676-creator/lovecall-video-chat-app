@@ -28,6 +28,14 @@ import type { AcquiredMedia } from '@/lib/media-permissions';
 
 interface FloatingReaction { id: string; emoji: string; x: number; }
 
+const QUALITY_CONFIG = {
+  excellent: { color: 'text-emerald-400', bg: 'bg-emerald-400', label: 'Excellent', dot: 'bg-emerald-400' },
+  good:      { color: 'text-green-400',   bg: 'bg-green-400',   label: 'Good',      dot: 'bg-green-400' },
+  fair:      { color: 'text-yellow-400',  bg: 'bg-yellow-400',  label: 'Fair',      dot: 'bg-yellow-400' },
+  poor:      { color: 'text-red-400',     bg: 'bg-red-400',     label: 'Poor',      dot: 'bg-red-400' },
+  unknown:   { color: 'text-white/30',    bg: 'bg-white/30',    label: '',          dot: 'bg-white/30' },
+};
+
 export default function Room() {
   const { id } = useParams<{ id: string }>();
   const [_, setLocation] = useLocation();
@@ -43,7 +51,7 @@ export default function Room() {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
 
-  const { sendMessage } = usePeer(mediaReady ? id : null);
+  const { sendMessage, sendTyping } = usePeer(mediaReady ? id : null);
   const [lastARGesture, setLastARGesture] = useState<GestureName>('none');
 
   const floatEmoji = useCallback((emoji: string) => {
@@ -65,7 +73,7 @@ export default function Room() {
     setLastARGesture(gesture);
     setTimeout(() => setLastARGesture('none'), 2000);
     const state = useRoomStore.getState();
-    const cx = window.innerWidth * 0.75;  // Particle origin near PIP (right side)
+    const cx = window.innerWidth * 0.75;
     const cy = window.innerHeight * 0.6;
 
     switch (gesture) {
@@ -125,9 +133,6 @@ export default function Room() {
     else if (angle<-18) { s.toggleEffect('filter_cool'); floatEmoji('❄️'); }
   }, [floatEmoji]);
 
-  // Pass localVideoRef directly — useAR reads .current inside its effect,
-  // so it always has the live element even if it mounts after first render.
-  // AR runs whenever gesture mode is ON *or* any AR accessory is active
   const anyARActive = store.activeEffects.some(e =>
     e.startsWith('ar_') || e === 'filter_motion_bloom' || e === 'filter_light_trails',
   );
@@ -177,6 +182,23 @@ export default function Room() {
     return () => window.removeEventListener('peer-reaction' as any, handler as any);
   }, []);
 
+  // Keyboard shortcuts: K=mic, V=video, D=draw, F=fullscreen, Esc=close panels
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.key === 'k' || e.key === 'K') { store.toggleAudio(); }
+      else if (e.key === 'v' || e.key === 'V') { store.toggleVideo(); }
+      else if (e.key === 'd' || e.key === 'D') { store.setDrawingMode(!store.isDrawingMode); }
+      else if (e.key === 'f' || e.key === 'F') {
+        if (!document.fullscreenElement) rootRef.current?.requestFullscreen();
+        else document.exitFullscreen();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [store]);
+
   const handleGestureReaction = useCallback((emoji: string) => {
     const rid = `${Date.now()}-${Math.random()}`;
     setFloatingReactions(f => [...f, { id: rid, emoji, x: 40+Math.random()*20 }]);
@@ -184,7 +206,6 @@ export default function Room() {
   }, []);
 
   const handleAchievement = useCallback((ach: {title:string;emoji:string}) => setPendingAchievement(ach), []);
-
   const handleDisconnect = () => { store.disconnect(); setMediaReady(false); setLocation('/'); };
 
   const copyRoomId = () => {
@@ -215,6 +236,8 @@ export default function Room() {
     document.addEventListener('fullscreenchange', handler);
     return ()=>document.removeEventListener('fullscreenchange', handler);
   }, []);
+
+  const qualityCfg = QUALITY_CONFIG[store.connectionQuality];
 
   if (!mediaReady) return <MediaPermissionGate onReady={handleMediaReady} />;
 
@@ -260,7 +283,6 @@ export default function Room() {
 
       <CanvasOverlay sendMessage={sendMessage} />
 
-      {/* Face / hand AR overlay — videoRef used to map landmark coords to PIP position */}
       <ARFaceOverlay
         faceLandmarks={arState.faceLandmarks}
         handLandmarks={arState.handLandmarks}
@@ -281,10 +303,10 @@ export default function Room() {
       <PrivacyMode />
       <Toolbox onAchievement={handleAchievement} sendMessage={sendMessage} />
       <EmojiReactions sendMessage={sendMessage} />
-      <ChatPanel sendMessage={sendMessage} />
+      <ChatPanel sendMessage={sendMessage} sendTyping={sendTyping} />
       <AchievementToast achievement={pendingAchievement} onDone={()=>setPendingAchievement(null)} />
 
-      {/* Local Video PIP — AR overlays are anchored to this element */}
+      {/* Local Video PIP */}
       <div
         className="absolute bottom-24 right-6 w-32 h-48 md:w-44 md:h-64 bg-black rounded-2xl overflow-hidden shadow-2xl z-20 group transition-transform hover:scale-105"
         style={{ border:`1px solid ${modeConfig.primaryColor}30`, boxShadow:`0 0 20px ${modeConfig.glowColor}` }}
@@ -306,7 +328,7 @@ export default function Room() {
         </div>
         <div className="absolute top-2 right-2 text-sm opacity-0 group-hover:opacity-100 transition-opacity">{modeConfig.emoji}</div>
         {store.motionData && store.gestureMode && (
-          <div className="absolute inset-0 pointer-events-none rounded-2xl transition-opacity duration-100"
+          <div className="absolute inset-0 pointer-events-none rounded-2xl"
             style={{ boxShadow:`inset 0 0 ${Math.round(store.motionData.area*40+4)}px ${modeConfig.primaryColor}60`, opacity:store.motionData.area*5 }} />
         )}
       </div>
@@ -321,7 +343,7 @@ export default function Room() {
               {store.audioEnabled?<Mic className="w-5 h-5"/>:<MicOff className="w-5 h-5"/>}
             </Button>
           </TooltipTrigger>
-          <TooltipContent><p>{store.audioEnabled?'Mute':'Unmute'}</p></TooltipContent>
+          <TooltipContent><p>{store.audioEnabled?'Mute (K)':'Unmute (K)'}</p></TooltipContent>
         </Tooltip>
 
         <Tooltip>
@@ -332,12 +354,11 @@ export default function Room() {
               {store.videoEnabled?<VideoIcon className="w-5 h-5"/>:<VideoOff className="w-5 h-5"/>}
             </Button>
           </TooltipTrigger>
-          <TooltipContent><p>{store.videoEnabled?'Stop Video':'Start Video'}</p></TooltipContent>
+          <TooltipContent><p>{store.videoEnabled?'Stop Video (V)':'Start Video (V)'}</p></TooltipContent>
         </Tooltip>
 
         <div className="w-px h-8 bg-white/10 mx-1" />
 
-        {/* AR Vibes */}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="ghost" size="icon"
@@ -383,7 +404,7 @@ export default function Room() {
               {isFullscreen?<Minimize className="w-5 h-5"/>:<Maximize className="w-5 h-5"/>}
             </Button>
           </TooltipTrigger>
-          <TooltipContent><p>{isFullscreen?'Exit Fullscreen':'Fullscreen'}</p></TooltipContent>
+          <TooltipContent><p>{isFullscreen?'Exit Fullscreen (F)':'Fullscreen (F)'}</p></TooltipContent>
         </Tooltip>
       </div>
 
@@ -392,18 +413,55 @@ export default function Room() {
         <div className="glass-panel px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs text-white/40">
           <span className="text-base">{modeConfig.emoji}</span>
           <span>{modeConfig.moodLabel}</span>
-          {store.connectionStatus==='connected'&&<><span className="text-white/20">|</span><div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"/><span className="text-green-400/70">Live</span></>}
-          {store.connectionStatus==='connecting'&&<><span className="text-white/20">|</span><div className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse"/><span className="text-yellow-400/70">Connecting…</span></>}
+          {store.connectionStatus==='connected' && (
+            <>
+              <span className="text-white/20">|</span>
+              <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${qualityCfg.dot}`} />
+              <span className={qualityCfg.color}>
+                {qualityCfg.label || 'Live'}
+              </span>
+            </>
+          )}
+          {store.connectionStatus==='connecting' && (
+            <>
+              <span className="text-white/20">|</span>
+              <div className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+              <span className="text-yellow-400/70">Connecting…</span>
+            </>
+          )}
         </div>
       </div>
 
-      {store.isDrawingMode&&(
+      {/* Drawing mode hint */}
+      {store.isDrawingMode && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
           <div className="glass-panel px-4 py-1.5 rounded-full text-xs text-primary font-medium flex items-center gap-2">
-            <span>✏️</span> Drawing Mode — Ctrl+Z to undo
+            <span>✏️</span> Drawing Mode — Ctrl+Z undo · D to toggle
           </div>
         </div>
       )}
+
+      {/* Keyboard shortcuts hint (shows briefly on first load) */}
+      <KeyboardHint />
+    </div>
+  );
+}
+
+function KeyboardHint() {
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(false), 5000);
+    return () => clearTimeout(t);
+  }, []);
+  if (!visible) return null;
+  return (
+    <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-20 pointer-events-none animate-in fade-in duration-1000">
+      <div className="glass-panel px-4 py-2 rounded-full text-[10px] text-white/30 flex items-center gap-3">
+        <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded text-white/40">K</kbd> mic</span>
+        <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded text-white/40">V</kbd> video</span>
+        <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded text-white/40">D</kbd> draw</span>
+        <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded text-white/40">F</kbd> fullscreen</span>
+      </div>
     </div>
   );
 }

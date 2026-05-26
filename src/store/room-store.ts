@@ -11,10 +11,12 @@ export interface ChatMessage {
   id: string; text: string; from: 'me' | 'partner'; timestamp: number;
 }
 
-export type DrawTool = 'pen' | 'eraser' | 'spray' | 'neon' | 'stamp' | 'rainbow' | 'watercolor' | 'glow' | 'marker';
+export type DrawTool = 'pen' | 'eraser' | 'spray' | 'neon' | 'stamp' | 'rainbow' | 'watercolor' | 'glow' | 'marker' | 'chalk' | 'calligraphy';
 export type DrawAction = 'undo' | 'redo' | 'clear' | 'save' | null;
+export type ConnectionQuality = 'excellent' | 'good' | 'fair' | 'poor' | 'unknown';
 
 export interface MotionPoint { cx: number; cy: number; area: number; }
+export interface PartnerCursor { x: number; y: number; }
 
 interface RoomState {
   peer: Peer | null;
@@ -35,6 +37,7 @@ interface RoomState {
   contrast: number;
   ripples: Ripple[];
   activeSoundscapes: string[];
+  soundscapeVolumes: Record<string, number>;
   unlockedAchievements: string[];
   isDrawingMode: boolean;
   drawColor: string;
@@ -45,9 +48,12 @@ interface RoomState {
   drawAction: DrawAction;
   chatMessages: ChatMessage[];
   unreadCount: number;
+  partnerIsTyping: boolean;
   gestureMode: boolean;
   gestureSensitivity: number;
   motionData: MotionPoint | null;
+  connectionQuality: ConnectionQuality;
+  partnerCursor: PartnerCursor | null;
 
   setPeer: (peer: Peer | null) => void;
   setLocalStream: (stream: MediaStream | null) => void;
@@ -70,6 +76,7 @@ interface RoomState {
   addRipple: (ripple: Ripple) => void;
   removeRipple: (id: string) => void;
   toggleSoundscape: (id: string) => void;
+  setSoundscapeVolume: (id: string, volume: number) => void;
   unlockAchievement: (id: string) => void;
   setDrawingMode: (v: boolean) => void;
   setDrawColor: (c: string) => void;
@@ -81,9 +88,12 @@ interface RoomState {
   clearDrawAction: () => void;
   addChatMessage: (msg: ChatMessage) => void;
   clearUnread: () => void;
+  setPartnerTyping: (v: boolean) => void;
   setGestureMode: (v: boolean) => void;
   setGestureSensitivity: (v: number) => void;
   setMotionData: (d: MotionPoint | null) => void;
+  setConnectionQuality: (q: ConnectionQuality) => void;
+  setPartnerCursor: (pos: PartnerCursor | null) => void;
 }
 
 export const useRoomStore = create<RoomState>((set, get) => ({
@@ -92,12 +102,12 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   activeEffects: [], dataConnection: null, mediaConnection: null,
   mode: 'romance', privacyMode: false, videoFilter: 'none',
   brightness: 100, warmth: 0, contrast: 100,
-  ripples: [], activeSoundscapes: [], unlockedAchievements: [],
+  ripples: [], activeSoundscapes: [], soundscapeVolumes: {}, unlockedAchievements: [],
   isDrawingMode: false, drawColor: '#e11d48', drawSize: 4,
   drawTool: 'pen', drawOpacity: 90, stampEmoji: '❤️', drawAction: null,
-  chatMessages: [], unreadCount: 0,
+  chatMessages: [], unreadCount: 0, partnerIsTyping: false,
   gestureMode: true, gestureSensitivity: 50,
-  motionData: null,
+  motionData: null, connectionQuality: 'unknown', partnerCursor: null,
 
   setPeer: (peer) => set({ peer }),
   setLocalStream: (stream) => set({ localStream: stream }),
@@ -135,6 +145,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       connectionStatus: 'disconnected', dataConnection: null, mediaConnection: null,
       activeEffects: [], privacyMode: false, ripples: [], activeSoundscapes: [],
       chatMessages: [], unreadCount: 0, motionData: null,
+      connectionQuality: 'unknown', partnerCursor: null, partnerIsTyping: false,
     });
   },
 
@@ -152,6 +163,8 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         ? s.activeSoundscapes.filter(x => x !== id)
         : [...s.activeSoundscapes, id],
     })),
+  setSoundscapeVolume: (id, volume) =>
+    set(s => ({ soundscapeVolumes: { ...s.soundscapeVolumes, [id]: volume } })),
   unlockAchievement: (id) =>
     set(s => ({
       unlockedAchievements: s.unlockedAchievements.includes(id)
@@ -172,7 +185,10 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       unreadCount: msg.from === 'partner' ? s.unreadCount + 1 : s.unreadCount,
     })),
   clearUnread: () => set({ unreadCount: 0 }),
+  setPartnerTyping: (v) => set({ partnerIsTyping: v }),
   setGestureMode: (v) => set({ gestureMode: v }),
   setGestureSensitivity: (v) => set({ gestureSensitivity: v }),
   setMotionData: (d) => set({ motionData: d }),
+  setConnectionQuality: (q) => set({ connectionQuality: q }),
+  setPartnerCursor: (pos) => set({ partnerCursor: pos }),
 }));

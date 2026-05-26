@@ -5,7 +5,9 @@ export type ExperienceMode =
   | 'date-night'
   | 'intimate'
   | 'adventure'
-  | 'celebration';
+  | 'celebration'
+  | 'cozy'
+  | 'midnight';
 
 export interface ModeConfig {
   id: ExperienceMode;
@@ -17,10 +19,10 @@ export interface ModeConfig {
   glowColor: string;
   particleColors: string[];
   particleShape: 'heart' | 'star' | 'circle' | 'confetti' | 'snowflake';
-  autoEffects: string[];        // AR effects auto-enabled on mode switch
-  gestureEmoji: string;         // emoji launched on wave gesture
-  moodLabel: string;            // short label shown in status bar
-  borderGlow: string;           // CSS glow color for video border
+  autoEffects: string[];
+  gestureEmoji: string;
+  moodLabel: string;
+  borderGlow: string;
 }
 
 export const MODES: ModeConfig[] = [
@@ -128,6 +130,36 @@ export const MODES: ModeConfig[] = [
     gestureEmoji: '🎊',
     moodLabel: 'Celebrating',
     borderGlow: 'rgba(168,85,247,0.6)',
+  },
+  {
+    id: 'cozy',
+    name: 'Cozy',
+    emoji: '🕯️',
+    description: 'Warm & snug',
+    bgClass: 'bg-gradient-date-night',
+    primaryColor: '#d97706',
+    glowColor: 'rgba(217,119,6,0.5)',
+    particleColors: ['#d97706', '#fbbf24', '#fef3c7', '#f97316'],
+    particleShape: 'circle',
+    autoEffects: ['filter_vignette', 'filter_wax'],
+    gestureEmoji: '🧡',
+    moodLabel: 'Cozy',
+    borderGlow: 'rgba(217,119,6,0.55)',
+  },
+  {
+    id: 'midnight',
+    name: 'Midnight',
+    emoji: '🌌',
+    description: 'Late night energy',
+    bgClass: 'bg-gradient-chill',
+    primaryColor: '#6366f1',
+    glowColor: 'rgba(99,102,241,0.5)',
+    particleColors: ['#6366f1', '#818cf8', '#c7d2fe', '#a5b4fc'],
+    particleShape: 'star',
+    autoEffects: ['filter_starfall', 'filter_aurora', 'filter_vignette'],
+    gestureEmoji: '🌌',
+    moodLabel: 'Midnight',
+    borderGlow: 'rgba(99,102,241,0.6)',
   },
 ];
 

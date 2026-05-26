@@ -12,9 +12,11 @@ import { PrivacyMode } from '@/components/PrivacyMode';
 import { RippleCanvas } from '@/components/RippleCanvas';
 import { AchievementToast } from '@/components/AchievementToast';
 import { EmojiReactions } from '@/components/EmojiReactions';
+import { MediaPermissionGate } from '@/components/MediaPermissionGate';
 import { buildFilterStyle } from '@/components/VideoFilter';
 import { getModeConfig } from '@/lib/modes';
 import { checkAndUnlock } from '@/lib/achievements';
+import type { AcquiredMedia } from '@/lib/media-permissions';
 
 interface FloatingReaction {
   id: string;
@@ -26,19 +28,27 @@ export default function Room() {
   const { id } = useParams<{ id: string }>();
   const [_, setLocation] = useLocation();
   const store = useRoomStore();
-  const { sendMessage } = usePeer(id);
+  const [mediaReady, setMediaReady] = useState(!!store.localStream);
   const [copied, setCopied] = useState(false);
   const [pendingAchievement, setPendingAchievement] = useState<{ title: string; emoji: string; description?: string } | null>(null);
   const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [captureFlash, setCaptureFlash] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
 
+  // Only initialize PeerJS after media is ready (gate complete)
+  const { sendMessage } = usePeer(mediaReady ? id : null);
+
   const modeConfig = getModeConfig(store.mode);
   const filterStyle = buildFilterStyle(store.videoFilter, store.brightness, store.warmth, store.contrast);
+
+  // When gate hands us a stream, store it and proceed
+  const handleMediaReady = useCallback((media: AcquiredMedia) => {
+    store.setLocalStream(media.stream);
+    setMediaReady(true);
+  }, [store]);
 
   useEffect(() => {
     if (localVideoRef.current && store.localStream) {
@@ -59,13 +69,13 @@ export default function Room() {
     }
   }, [store.connectionStatus]);
 
-  // Handle incoming reactions from peer
+  // Receive emoji reactions from peer
   useEffect(() => {
     const handler = (e: CustomEvent<{ emoji: string }>) => {
-      const id2 = `${Date.now()}-${Math.random()}`;
+      const reactId = `${Date.now()}-${Math.random()}`;
       const x = 55 + Math.random() * 15;
-      setFloatingReactions(f => [...f, { id: id2, emoji: e.detail.emoji, x }]);
-      setTimeout(() => setFloatingReactions(f => f.filter(r => r.id !== id2)), 3000);
+      setFloatingReactions(f => [...f, { id: reactId, emoji: e.detail.emoji, x }]);
+      setTimeout(() => setFloatingReactions(f => f.filter(r => r.id !== reactId)), 3000);
     };
     window.addEventListener('peer-reaction' as any, handler as any);
     return () => window.removeEventListener('peer-reaction' as any, handler as any);
@@ -77,6 +87,7 @@ export default function Room() {
 
   const handleDisconnect = () => {
     store.disconnect();
+    setMediaReady(false);
     setLocation('/');
   };
 
@@ -106,10 +117,8 @@ export default function Room() {
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
       rootRef.current?.requestFullscreen();
-      setIsFullscreen(true);
     } else {
       document.exitFullscreen();
-      setIsFullscreen(false);
     }
   }, []);
 
@@ -119,15 +128,15 @@ export default function Room() {
     return () => document.removeEventListener('fullscreenchange', handler);
   }, []);
 
-  // Wrap sendMessage to also dispatch peer-reaction for incoming
-  const wrappedSend = useCallback((data: unknown) => {
-    sendMessage(data);
-  }, [sendMessage]);
+  // Show permission gate until media is ready
+  if (!mediaReady) {
+    return <MediaPermissionGate onReady={handleMediaReady} />;
+  }
 
   return (
     <div ref={rootRef} className={`relative w-full h-[100dvh] overflow-hidden flex items-center justify-center ${modeConfig.bgClass}`}>
 
-      {/* Camera flash overlay */}
+      {/* Camera-flash overlay for photo capture */}
       {captureFlash && (
         <div className="absolute inset-0 z-[100] bg-white pointer-events-none capture-flash" />
       )}
@@ -142,7 +151,7 @@ export default function Room() {
 
       <ModeParticles mode={store.mode} active={true} />
 
-      {/* Remote Video (Background) */}
+      {/* Remote Video (full background) */}
       <div className="absolute inset-0 z-0">
         {store.remoteStream ? (
           <video
@@ -153,12 +162,12 @@ export default function Room() {
             style={{ filter: filterStyle !== 'none' ? filterStyle : undefined }}
           />
         ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center relative">
+          <div className="w-full h-full flex flex-col items-center justify-center">
             <div className="z-10 flex flex-col items-center p-8 glass-panel rounded-3xl animate-in fade-in zoom-in duration-700">
               <div className="relative w-24 h-24 rounded-full bg-primary/20 flex items-center justify-center mb-6">
-                <div className="absolute inset-0 rounded-full border-2 border-primary/50 animate-ping" style={{ animationDuration: '2s' }}></div>
+                <div className="absolute inset-0 rounded-full border-2 border-primary/50 animate-ping" style={{ animationDuration: '2s' }} />
                 <div className="w-16 h-16 rounded-full bg-primary/40 flex items-center justify-center animate-pulse">
-                  <div className="w-8 h-8 rounded-full bg-primary" style={{ boxShadow: `0 0 20px ${modeConfig.primaryColor}` }}></div>
+                  <div className="w-8 h-8 rounded-full bg-primary" style={{ boxShadow: `0 0 20px ${modeConfig.primaryColor}` }} />
                 </div>
               </div>
               <h2 className="text-3xl font-serif text-white mb-2 tracking-wide">Waiting for partner</h2>
@@ -166,7 +175,7 @@ export default function Room() {
               <div className="flex items-center gap-3 bg-black/40 p-2 pl-6 rounded-2xl border border-white/10">
                 <span className="font-mono text-2xl tracking-widest text-primary font-semibold">{id}</span>
                 <Button size="icon" variant="ghost"
-                  className="rounded-xl w-12 h-12 bg-white/5 hover:bg-white/10 hover:text-primary transition-colors"
+                  className="rounded-xl w-12 h-12 bg-white/5 hover:bg-white/10 hover:text-primary"
                   onClick={copyRoomId}
                 >
                   {copied ? <Check className="w-5 h-5 text-green-400" /> : <Copy className="w-5 h-5" />}
@@ -178,22 +187,18 @@ export default function Room() {
       </div>
 
       <CanvasOverlay />
-      <RippleCanvas onAchievement={handleAchievement} sendMessage={wrappedSend} />
+      <RippleCanvas onAchievement={handleAchievement} sendMessage={sendMessage} />
       <PrivacyMode />
-      <Toolbox onAchievement={handleAchievement} sendMessage={wrappedSend} />
-      <EmojiReactions sendMessage={wrappedSend} />
+      <Toolbox onAchievement={handleAchievement} sendMessage={sendMessage} />
+      <EmojiReactions sendMessage={sendMessage} />
       <AchievementToast achievement={pendingAchievement} onDone={() => setPendingAchievement(null)} />
 
-      {/* Local Video (PIP) */}
+      {/* Local Video PIP */}
       <div className="absolute bottom-24 right-6 w-32 h-48 md:w-44 md:h-64 bg-black rounded-2xl overflow-hidden shadow-2xl z-20 group transition-transform hover:scale-105"
         style={{ border: `1px solid ${modeConfig.primaryColor}30`, boxShadow: `0 0 20px ${modeConfig.glowColor}` }}
       >
         {store.localStream ? (
-          <video
-            ref={localVideoRef}
-            autoPlay
-            playsInline
-            muted
+          <video ref={localVideoRef} autoPlay playsInline muted
             className="w-full h-full object-cover scale-x-[-1]"
             style={{ filter: filterStyle !== 'none' ? filterStyle : undefined }}
           />
@@ -211,7 +216,7 @@ export default function Room() {
         </div>
       </div>
 
-      {/* Control Bar (Bottom) */}
+      {/* Bottom control bar */}
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 glass-panel rounded-full px-6 py-3 flex items-center gap-3 shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
         <Tooltip>
           <TooltipTrigger asChild>
@@ -278,32 +283,28 @@ export default function Room() {
         </Tooltip>
       </div>
 
-      {/* Status bar */}
+      {/* Status bar — top right */}
       <div className="absolute top-4 right-4 z-30 flex items-center gap-2">
         <div className="glass-panel px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs text-white/40">
           <span className="text-base">{modeConfig.emoji}</span>
           <span>{modeConfig.name}</span>
           {store.connectionStatus === 'connected' && (
-            <>
-              <span className="text-white/20">|</span>
-              <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
-              <span className="text-green-400/70">Live</span>
-            </>
+            <><span className="text-white/20">|</span>
+              <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-green-400/70">Live</span></>
           )}
           {store.connectionStatus === 'connecting' && (
-            <>
-              <span className="text-white/20">|</span>
-              <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse"></div>
-              <span className="text-yellow-400/70">Connecting…</span>
-            </>
+            <><span className="text-white/20">|</span>
+              <div className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+              <span className="text-yellow-400/70">Connecting…</span></>
           )}
         </div>
       </div>
 
       {/* Drawing mode indicator */}
       {store.isDrawingMode && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30">
-          <div className="glass-panel px-4 py-1.5 rounded-full text-xs text-primary font-medium flex items-center gap-2 animate-pulse">
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+          <div className="glass-panel px-4 py-1.5 rounded-full text-xs text-primary font-medium flex items-center gap-2">
             <span>✏️</span> Drawing Mode — Ctrl+Z to undo
           </div>
         </div>

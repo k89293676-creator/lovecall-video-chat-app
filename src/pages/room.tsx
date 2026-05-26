@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useLocation } from 'wouter';
 import { useRoomStore } from '@/store/room-store';
 import { usePeer } from '@/hooks/use-peer';
-import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Copy, Check, Camera, Maximize, Minimize } from 'lucide-react';
+import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Copy, Check, Camera, Maximize, Minimize, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Toolbox } from '@/components/Toolbox';
@@ -18,6 +18,7 @@ import { GestureLayer } from '@/components/GestureLayer';
 import { ARFaceOverlay, spawnHearts, spawnParticles, spawnStars } from '@/components/ARFaceOverlay';
 import { GestureIndicator } from '@/components/GestureIndicator';
 import { ARStatusBadge } from '@/components/ARStatusBadge';
+import { ARFilterCarousel } from '@/components/ARFilterCarousel';
 import { buildFilterStyle } from '@/components/VideoFilter';
 import { getModeConfig } from '@/lib/modes';
 import { checkAndUnlock } from '@/lib/achievements';
@@ -41,6 +42,7 @@ export default function Room() {
   const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [captureFlash, setCaptureFlash] = useState(false);
+  const [showVibes, setShowVibes] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -215,7 +217,6 @@ export default function Room() {
     }
   }, [store.connectionStatus]);
 
-  // Peer emoji reactions
   useEffect(() => {
     const handler = (e: CustomEvent<{ emoji: string }>) => {
       const reactId = `${Date.now()}-${Math.random()}`;
@@ -260,7 +261,7 @@ export default function Room() {
     if (!ctx) return;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const link = document.createElement('a');
-    link.download = `moonlight-${Date.now()}.png`;
+    link.download = `lovecall-${Date.now()}.png`;
     link.href = canvas.toDataURL('image/png');
     link.click();
     setCaptureFlash(true);
@@ -295,7 +296,7 @@ export default function Room() {
         <div className="absolute inset-0 z-[100] bg-white pointer-events-none capture-flash" />
       )}
 
-      {/* Floating reactions (peer + gesture) */}
+      {/* Floating reactions */}
       {floatingReactions.map(r => (
         <div key={r.id}
           className="fixed z-50 pointer-events-none select-none text-4xl animate-float-up"
@@ -345,7 +346,7 @@ export default function Room() {
       {/* AR + Drawing overlay */}
       <CanvasOverlay />
 
-      {/* Real face/hand AR overlay (MediaPipe landmarks) */}
+      {/* Real face/hand AR overlay */}
       <ARFaceOverlay
         faceLandmarks={arState.faceLandmarks}
         handLandmarks={arState.handLandmarks}
@@ -353,10 +354,10 @@ export default function Room() {
         faceExpression={arState.faceExpression}
       />
 
-      {/* MediaPipe gesture indicator */}
+      {/* Gesture HUD */}
       <GestureIndicator gesture={lastARGesture} />
 
-      {/* AR loading / tracking status badge */}
+      {/* AR tracking status */}
       <ARStatusBadge
         isLoading={arState.isLoading}
         isReady={arState.isReady}
@@ -366,12 +367,15 @@ export default function Room() {
         handLandmarks={arState.handLandmarks}
       />
 
-      {/* Gesture layer — reads local video, fires gesture events */}
+      {/* Gesture layer */}
       <GestureLayer
         videoRef={localVideoRef}
         onGestureReaction={handleGestureReaction}
         sendMessage={sendMessage}
       />
+
+      {/* Snap-style AR Vibe Carousel */}
+      <ARFilterCarousel visible={showVibes} onClose={() => setShowVibes(false)} />
 
       <RippleCanvas onAchievement={handleAchievement} sendMessage={sendMessage} />
       <PrivacyMode />
@@ -402,7 +406,6 @@ export default function Room() {
             <VideoOff className="w-8 h-8 text-white/30" />
           </div>
         )}
-        {/* Status badges */}
         <div className="absolute bottom-2 left-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           {!store.audioEnabled && (
             <div className="bg-black/50 p-1.5 rounded-md backdrop-blur-sm">
@@ -418,7 +421,6 @@ export default function Room() {
         <div className="absolute top-2 right-2 text-sm opacity-0 group-hover:opacity-100 transition-opacity">
           {modeConfig.emoji}
         </div>
-        {/* Gesture detection glow — indicates motion is being read from this feed */}
         {store.motionData && store.gestureMode && (
           <div
             className="absolute inset-0 pointer-events-none rounded-2xl transition-opacity duration-100"
@@ -454,6 +456,21 @@ export default function Room() {
             </Button>
           </TooltipTrigger>
           <TooltipContent><p>{store.videoEnabled ? 'Stop Video' : 'Start Video'}</p></TooltipContent>
+        </Tooltip>
+
+        <div className="w-px h-8 bg-white/10 mx-1" />
+
+        {/* AR Vibes toggle */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon"
+              className={`rounded-full w-12 h-12 transition-all ${showVibes ? 'bg-primary/20 text-primary shadow-[0_0_12px_rgba(225,29,72,0.4)]' : 'hover:bg-white/10 text-white/60 hover:text-white'}`}
+              onClick={() => setShowVibes(v => !v)}
+            >
+              <Sparkles className="w-5 h-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent><p>AR Vibes</p></TooltipContent>
         </Tooltip>
 
         <div className="w-px h-8 bg-white/10 mx-1" />
@@ -497,7 +514,7 @@ export default function Room() {
         </Tooltip>
       </div>
 
-      {/* Status bar — top right */}
+      {/* Status bar */}
       <div className="absolute top-4 right-4 z-30 flex items-center gap-2">
         <div className="glass-panel px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs text-white/40">
           <span className="text-base">{modeConfig.emoji}</span>
@@ -519,7 +536,6 @@ export default function Room() {
         </div>
       </div>
 
-      {/* Drawing mode indicator */}
       {store.isDrawingMode && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
           <div className="glass-panel px-4 py-1.5 rounded-full text-xs text-primary font-medium flex items-center gap-2">

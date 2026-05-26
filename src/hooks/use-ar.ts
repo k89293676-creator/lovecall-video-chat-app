@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { loadMediaPipe, getFaceLandmarker, getGestureRecognizer } from '@/lib/mediapipe-loader';
 import { detectGesture, type GestureName } from '@/hooks/use-gestures';
 
@@ -6,135 +6,163 @@ export interface FaceLandmark { x: number; y: number; z: number }
 export interface HandLandmark { x: number; y: number; z: number }
 
 export interface HeadPose {
-  tiltAngle: number;   // degrees, positive = tilt right
-  nodAngle:  number;   // pitch
-  yawAngle:  number;   // yaw
+  tiltAngle: number;
+  nodAngle:  number;
+  yawAngle:  number;
 }
 
 export interface FaceExpression {
-  mouthOpen:     boolean;
+  mouthOpen:      boolean;
   mouthOpenRatio: number;
-  eyeBlinkLeft:  boolean;
-  eyeBlinkRight: boolean;
-  smiling:       boolean;
+  eyeBlinkLeft:   boolean;
+  eyeBlinkRight:  boolean;
+  smiling:        boolean;
   eyeBrowsRaised: boolean;
-  eyeGazeLeft:   boolean;
-  eyeGazeRight:  boolean;
+  eyeGazeLeft:    boolean;
+  eyeGazeRight:   boolean;
 }
 
 export interface ARData {
-  faceLandmarks:    FaceLandmark[]   | null;
-  handLandmarks:    HandLandmark[][] | null;
+  faceLandmarks:      FaceLandmark[]   | null;
+  handLandmarks:      HandLandmark[][] | null;
   recognizedGestures: string[];
-  headPose:         HeadPose         | null;
-  faceExpression:   FaceExpression   | null;
+  headPose:           HeadPose         | null;
+  faceExpression:     FaceExpression   | null;
 }
 
 export interface ARState extends ARData {
-  isLoading:      boolean;
-  isReady:        boolean;
-  error:          string | null;
+  isLoading:       boolean;
+  isReady:         boolean;
+  error:           string | null;
   loadingProgress: number;
 }
 
 interface UseAROptions {
-  /** Pass the ref object — the hook reads .current inside its effect so it always gets the live element */
-  videoRef:       React.RefObject<HTMLVideoElement>;
-  enabled:        boolean;
-  onGesture?:     (gesture: GestureName) => void;
-  onHeadTilt?:    (angle: number) => void;
-  onMouthOpen?:   () => void;
-  onBlink?:       (side: 'left' | 'right' | 'both') => void;
-  onSmile?:       () => void;
+  videoRef:        React.RefObject<HTMLVideoElement>;
+  enabled:         boolean;
+  onGesture?:      (gesture: GestureName) => void;
+  onHeadTilt?:     (angle: number) => void;
+  onMouthOpen?:    () => void;
+  onBlink?:        (side: 'left' | 'right' | 'both') => void;
+  onSmile?:        () => void;
   onEyeBrowRaise?: () => void;
 }
 
 // Face landmark indices (MediaPipe 478-point model)
-const UPPER_LIP_CENTER = 13;
-const LOWER_LIP_CENTER = 14;
+const UPPER_LIP   = 13;
+const LOWER_LIP   = 14;
 const MOUTH_LEFT  = 61;
 const MOUTH_RIGHT = 291;
-const LEFT_EYE_TOP    = 159;
-const LEFT_EYE_BOTTOM = 145;
-const RIGHT_EYE_TOP    = 386;
-const RIGHT_EYE_BOTTOM = 374;
-const LEFT_IRIS_CENTER  = 468;
-const RIGHT_IRIS_CENTER = 473;
-const LEFT_EYE_OUTER  = 33;
-const LEFT_EYE_INNER  = 133;
-const RIGHT_EYE_OUTER = 263;
-const RIGHT_EYE_INNER = 362;
-const LEFT_EYEBROW  = 70;
-const RIGHT_EYEBROW = 300;
+const L_EYE_TOP   = 159;
+const L_EYE_BOT   = 145;
+const R_EYE_TOP   = 386;
+const R_EYE_BOT   = 374;
+const L_IRIS      = 468;
+const R_IRIS      = 473;
+const L_EYE_OUT   = 33;
+const L_EYE_IN    = 133;
+const R_EYE_OUT   = 263;
+const R_EYE_IN    = 362;
+const L_BROW      = 70;
+const R_BROW      = 300;
 const NOSE_BRIDGE = 6;
+const CHIN        = 152;
+
+const SMOOTH = 0.3; // EMA smoothing factor (lower = smoother/laggier)
+
+function smoothLandmarks(
+  prev: FaceLandmark[] | null,
+  curr: FaceLandmark[],
+): FaceLandmark[] {
+  if (!prev || prev.length !== curr.length) return curr;
+  return curr.map((lm, i) => ({
+    x: prev[i].x + SMOOTH * (lm.x - prev[i].x),
+    y: prev[i].y + SMOOTH * (lm.y - prev[i].y),
+    z: prev[i].z + SMOOTH * (lm.z - prev[i].z),
+  }));
+}
 
 function computeHeadPose(lm: FaceLandmark[]): HeadPose {
-  const le   = lm[LEFT_EYE_OUTER];
-  const re   = lm[RIGHT_EYE_OUTER];
+  const le   = lm[L_EYE_OUT];
+  const re   = lm[R_EYE_OUT];
   const nose = lm[NOSE_BRIDGE];
-  const chin = lm[152];
-  if (!le||!re||!nose||!chin) return { tiltAngle:0, nodAngle:0, yawAngle:0 };
+  const chin = lm[CHIN];
+  if (!le || !re || !nose || !chin) return { tiltAngle: 0, nodAngle: 0, yawAngle: 0 };
 
-  const tiltAngle = Math.atan2(re.y-le.y, re.x-le.x) * (180/Math.PI);
+  const tiltAngle = Math.atan2(re.y - le.y, re.x - le.x) * (180 / Math.PI);
 
-  const eyeMidY = (le.y+re.y)/2;
-  const faceH   = Math.abs(chin.y-eyeMidY);
-  const nodAngle = faceH>0 ? ((nose.y-eyeMidY)/faceH - 0.35)*60 : 0;
+  const eyeMidY  = (le.y + re.y) / 2;
+  const faceH    = Math.abs(chin.y - eyeMidY);
+  const nodAngle = faceH > 0 ? ((nose.y - eyeMidY) / faceH - 0.35) * 60 : 0;
 
-  const eyeW = Math.abs(re.x-le.x);
-  const noseOffCenter = (nose.x-(le.x+re.x)/2) / (eyeW+0.001);
-  const yawAngle = noseOffCenter * 80;
+  const eyeW           = Math.abs(re.x - le.x);
+  const noseOffCenter  = (nose.x - (le.x + re.x) / 2) / (eyeW + 0.001);
+  const yawAngle       = noseOffCenter * 80;
 
   return { tiltAngle, nodAngle, yawAngle };
 }
 
 function computeFaceExpression(lm: FaceLandmark[]): FaceExpression {
-  const mouthH = lm[UPPER_LIP_CENTER]&&lm[LOWER_LIP_CENTER]
-    ? Math.abs(lm[LOWER_LIP_CENTER].y - lm[UPPER_LIP_CENTER].y) : 0;
-  const mouthW = lm[MOUTH_LEFT]&&lm[MOUTH_RIGHT]
+  const mouthH = lm[UPPER_LIP] && lm[LOWER_LIP]
+    ? Math.abs(lm[LOWER_LIP].y - lm[UPPER_LIP].y) : 0;
+  const mouthW = lm[MOUTH_LEFT] && lm[MOUTH_RIGHT]
     ? Math.abs(lm[MOUTH_RIGHT].x - lm[MOUTH_LEFT].x) : 0.1;
-  const mouthOpenRatio = Math.min(1, mouthH/(mouthW*0.6));
+  const mouthOpenRatio = Math.min(1, mouthH / (mouthW * 0.6));
   const mouthOpen = mouthOpenRatio > 0.35;
 
-  const leftEyeH  = lm[LEFT_EYE_TOP]&&lm[LEFT_EYE_BOTTOM]
-    ? Math.abs(lm[LEFT_EYE_BOTTOM].y - lm[LEFT_EYE_TOP].y) : 0.03;
-  const rightEyeH = lm[RIGHT_EYE_TOP]&&lm[RIGHT_EYE_BOTTOM]
-    ? Math.abs(lm[RIGHT_EYE_BOTTOM].y - lm[RIGHT_EYE_TOP].y) : 0.03;
-  const baseEyeH = 0.025;
-  const eyeBlinkLeft  = leftEyeH  < baseEyeH*0.55;
-  const eyeBlinkRight = rightEyeH < baseEyeH*0.55;
+  const leftEyeH  = lm[L_EYE_TOP] && lm[L_EYE_BOT]
+    ? Math.abs(lm[L_EYE_BOT].y - lm[L_EYE_TOP].y) : 0.03;
+  const rightEyeH = lm[R_EYE_TOP] && lm[R_EYE_BOT]
+    ? Math.abs(lm[R_EYE_BOT].y - lm[R_EYE_TOP].y) : 0.03;
+  const eyeBlinkLeft  = leftEyeH  < 0.014;
+  const eyeBlinkRight = rightEyeH < 0.014;
 
   let smiling = false;
-  if (lm[MOUTH_LEFT]&&lm[MOUTH_RIGHT]&&lm[LOWER_LIP_CENTER]) {
-    const cornerY = (lm[MOUTH_LEFT].y+lm[MOUTH_RIGHT].y)/2;
-    smiling = cornerY < lm[LOWER_LIP_CENTER].y - 0.01;
+  if (lm[MOUTH_LEFT] && lm[MOUTH_RIGHT] && lm[LOWER_LIP]) {
+    const cornerY = (lm[MOUTH_LEFT].y + lm[MOUTH_RIGHT].y) / 2;
+    smiling = cornerY < lm[LOWER_LIP].y - 0.008;
   }
 
   let eyeBrowsRaised = false;
-  if (lm[LEFT_EYEBROW]&&lm[RIGHT_EYEBROW]&&lm[LEFT_EYE_TOP]&&lm[RIGHT_EYE_TOP]) {
-    const leftBrowDist  = lm[LEFT_EYE_TOP].y  - lm[LEFT_EYEBROW].y;
-    const rightBrowDist = lm[RIGHT_EYE_TOP].y - lm[RIGHT_EYEBROW].y;
-    eyeBrowsRaised = (leftBrowDist+rightBrowDist)/2 > 0.04;
+  if (lm[L_BROW] && lm[R_BROW] && lm[L_EYE_TOP] && lm[R_EYE_TOP]) {
+    const leftBrowDist  = lm[L_EYE_TOP].y - lm[L_BROW].y;
+    const rightBrowDist = lm[R_EYE_TOP].y - lm[R_BROW].y;
+    eyeBrowsRaised = (leftBrowDist + rightBrowDist) / 2 > 0.04;
   }
 
   let eyeGazeLeft = false, eyeGazeRight = false;
-  if (lm[LEFT_IRIS_CENTER]&&lm[RIGHT_IRIS_CENTER]) {
-    const irisAvgX = (lm[LEFT_IRIS_CENTER].x+lm[RIGHT_IRIS_CENTER].x)/2;
+  if (lm[L_IRIS] && lm[R_IRIS]) {
+    const irisAvgX = (lm[L_IRIS].x + lm[R_IRIS].x) / 2;
     const eyeAvgX  = (
-      (lm[LEFT_EYE_OUTER].x+lm[LEFT_EYE_INNER].x)/2 +
-      (lm[RIGHT_EYE_OUTER].x+lm[RIGHT_EYE_INNER].x)/2
-    )/2;
-    if (irisAvgX-eyeAvgX > 0.025) eyeGazeRight = true;
-    if (eyeAvgX-irisAvgX > 0.025) eyeGazeLeft  = true;
+      (lm[L_EYE_OUT].x + lm[L_EYE_IN].x) / 2 +
+      (lm[R_EYE_OUT].x + lm[R_EYE_IN].x) / 2
+    ) / 2;
+    if (irisAvgX - eyeAvgX >  0.022) eyeGazeRight = true;
+    if (eyeAvgX  - irisAvgX > 0.022) eyeGazeLeft  = true;
   }
 
-  return { mouthOpen, mouthOpenRatio, eyeBlinkLeft, eyeBlinkRight, smiling, eyeBrowsRaised, eyeGazeLeft, eyeGazeRight };
+  return {
+    mouthOpen, mouthOpenRatio,
+    eyeBlinkLeft, eyeBlinkRight,
+    smiling, eyeBrowsRaised,
+    eyeGazeLeft, eyeGazeRight,
+  };
 }
 
 const INIT_STATE: ARState = {
   faceLandmarks: null, handLandmarks: null, recognizedGestures: [],
   headPose: null, faceExpression: null,
   isLoading: false, isReady: false, error: null, loadingProgress: 0,
+};
+
+const MP_GESTURE_MAP: Record<string, GestureName> = {
+  Open_Palm:   'open_palm',
+  Thumb_Up:    'thumbs_up',
+  Thumb_Down:  'thumbs_down',
+  Victory:     'peace',
+  Closed_Fist: 'fist',
+  Pointing_Up: 'point',
+  ILoveYou:    'rock_on',
 };
 
 export function useAR({
@@ -149,170 +177,199 @@ export function useAR({
 }: UseAROptions): ARState {
   const [state, setState] = useState<ARState>(INIT_STATE);
 
-  const rafRef             = useRef<number|null>(null);
-  const lastVideoTimeRef   = useRef(-1);
-  const gestureHoldRef     = useRef<{ name: GestureName; since: number }|null>(null);
-  const lastTriggeredRef   = useRef<GestureName>('none');
+  // ── Store all callbacks in refs so detection loop never restarts due to them ──
+  const cbGesture    = useRef(onGesture);
+  const cbHeadTilt   = useRef(onHeadTilt);
+  const cbMouthOpen  = useRef(onMouthOpen);
+  const cbBlink      = useRef(onBlink);
+  const cbSmile      = useRef(onSmile);
+  const cbBrowRaise  = useRef(onEyeBrowRaise);
 
-  // Debounce refs for face events
+  cbGesture.current   = onGesture;
+  cbHeadTilt.current  = onHeadTilt;
+  cbMouthOpen.current = onMouthOpen;
+  cbBlink.current     = onBlink;
+  cbSmile.current     = onSmile;
+  cbBrowRaise.current = onEyeBrowRaise;
+
+  // ── Detection state refs (never trigger re-renders) ──
+  const gestureHoldRef   = useRef<{ name: GestureName; since: number } | null>(null);
+  const lastTriggeredRef = useRef<GestureName>('none');
   const lastMouthOpenRef = useRef(0);
   const lastBlinkRef     = useRef(0);
   const lastSmileRef     = useRef(0);
   const lastTiltRef      = useRef(0);
-  const lastBrowRef      = useRef(0);
   const prevTiltRef      = useRef(0);
+  const lastBrowRef      = useRef(0);
+  const prevFaceLmRef    = useRef<FaceLandmark[] | null>(null);
+  const lastVideoTimeRef = useRef(-1);
+  const intervalRef      = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const stopLoop = useCallback(() => {
-    if (rafRef.current!==null) { cancelAnimationFrame(rafRef.current); rafRef.current=null; }
-  }, []);
-
-  const processGesture = useCallback(
-    (landmarks: HandLandmark[], mpGestureName: string) => {
-      if (!onGesture) return;
-
-      const MP_MAP: Record<string,GestureName> = {
-        Open_Palm:   'open_palm',
-        Thumb_Up:    'thumbs_up',
-        Thumb_Down:  'thumbs_down',
-        Victory:     'peace',
-        Closed_Fist: 'fist',
-        Pointing_Up: 'point',
-        ILoveYou:    'rock_on',
-      };
-
-      let gestureName: GestureName = 'none';
-      if (mpGestureName && mpGestureName!=='None') {
-        gestureName = MP_MAP[mpGestureName] ?? 'none';
-      }
-      // Fall back to landmark geometry classifier
-      if (gestureName==='none') {
-        const r = detectGesture(landmarks);
-        if (r.confidence > 0.7) gestureName = r.name;
-      }
-      if (gestureName==='none') { gestureHoldRef.current=null; return; }
-
-      const now = Date.now();
-      if (!gestureHoldRef.current || gestureHoldRef.current.name!==gestureName) {
-        gestureHoldRef.current = { name: gestureName, since: now };
-        return;
-      }
-      if (now-gestureHoldRef.current.since > 600 && lastTriggeredRef.current!==gestureName) {
-        lastTriggeredRef.current = gestureName;
-        onGesture(gestureName);
-        setTimeout(()=>{ lastTriggeredRef.current='none'; }, 1800);
-      }
-    },
-    [onGesture],
-  );
-
-  const processFaceEvents = useCallback((expr: FaceExpression, pose: HeadPose) => {
-    const now = Date.now();
-    if (expr.mouthOpen && now-lastMouthOpenRef.current > 3000) { lastMouthOpenRef.current=now; onMouthOpen?.(); }
-    if ((expr.eyeBlinkLeft||expr.eyeBlinkRight) && now-lastBlinkRef.current > 1500) {
-      lastBlinkRef.current=now;
-      onBlink?.(expr.eyeBlinkLeft&&expr.eyeBlinkRight?'both':expr.eyeBlinkLeft?'left':'right');
-    }
-    if (expr.smiling && now-lastSmileRef.current > 4000) { lastSmileRef.current=now; onSmile?.(); }
-    if (expr.eyeBrowsRaised && now-lastBrowRef.current > 3000) { lastBrowRef.current=now; onEyeBrowRaise?.(); }
-    if (Math.abs(pose.tiltAngle) > 18 && now-lastTiltRef.current > 2500) {
-      if (Math.sign(pose.tiltAngle)!==Math.sign(prevTiltRef.current) || Math.abs(pose.tiltAngle-prevTiltRef.current)>10) {
-        lastTiltRef.current=now; prevTiltRef.current=pose.tiltAngle; onHeadTilt?.(pose.tiltAngle);
-      }
-    } else { prevTiltRef.current=pose.tiltAngle; }
-  }, [onMouthOpen, onBlink, onSmile, onEyeBrowRaise, onHeadTilt]);
-
+  // ── Single effect — only re-runs when `enabled` changes ──
   useEffect(() => {
     if (!enabled) {
-      stopLoop();
-      setState(s => ({ ...s, isReady:false, faceLandmarks:null, handLandmarks:null, recognizedGestures:[], headPose:null, faceExpression:null }));
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+      setState(INIT_STATE);
+      prevFaceLmRef.current = null;
       return;
     }
 
     let active = true;
-    setState(s => ({ ...s, isLoading:true, error:null, loadingProgress:5 }));
+    setState(s => ({ ...s, isLoading: true, error: null, loadingProgress: 5 }));
 
     const timers = [
-      setTimeout(()=>active&&setState(s=>({...s,loadingProgress:25})), 800),
-      setTimeout(()=>active&&setState(s=>({...s,loadingProgress:55})), 2000),
-      setTimeout(()=>active&&setState(s=>({...s,loadingProgress:80})), 4000),
+      setTimeout(() => active && setState(s => ({ ...s, loadingProgress: 25 })), 700),
+      setTimeout(() => active && setState(s => ({ ...s, loadingProgress: 55 })), 2200),
+      setTimeout(() => active && setState(s => ({ ...s, loadingProgress: 80 })), 4500),
     ];
 
     loadMediaPipe()
       .then(() => {
         timers.forEach(clearTimeout);
         if (!active) return;
-        setState(s => ({ ...s, isLoading:false, isReady:true, loadingProgress:100 }));
+        setState(s => ({ ...s, isLoading: false, isReady: true, loadingProgress: 100 }));
 
-        const detectFrame = () => {
+        // ── Detection loop at 15 fps for smooth AR without overloading MediaPipe ──
+        intervalRef.current = setInterval(() => {
           if (!active) return;
 
-          // Read the video element from the ref each frame
-          const videoElement = videoRef.current;
-          if (!videoElement || videoElement.readyState < 2) {
-            rafRef.current = requestAnimationFrame(detectFrame);
-            return;
-          }
+          const video = videoRef.current;
+          if (!video || video.readyState < 2 || video.paused) return;
+          if (video.currentTime === lastVideoTimeRef.current) return;
+          lastVideoTimeRef.current = video.currentTime;
 
           const faceLandmarker    = getFaceLandmarker();
           const gestureRecognizer = getGestureRecognizer();
-          if (!faceLandmarker || !gestureRecognizer) {
-            rafRef.current = requestAnimationFrame(detectFrame);
-            return;
-          }
-
-          if (videoElement.currentTime === lastVideoTimeRef.current) {
-            rafRef.current = requestAnimationFrame(detectFrame);
-            return;
-          }
-          lastVideoTimeRef.current = videoElement.currentTime;
+          if (!faceLandmarker || !gestureRecognizer) return;
 
           try {
-            const now = performance.now();
-            const faceResults    = faceLandmarker.detectForVideo(videoElement, now);
-            const gestureResults = gestureRecognizer.recognizeForVideo(videoElement, now);
+            const ts = performance.now();
+            const faceRes    = faceLandmarker.detectForVideo(video, ts);
+            const gestureRes = gestureRecognizer.recognizeForVideo(video, ts);
 
-            const faceLm: FaceLandmark[]|null = faceResults?.faceLandmarks?.[0] ?? null;
-            const handLms: HandLandmark[][]|null =
-              gestureResults?.landmarks?.length > 0 ? gestureResults.landmarks : null;
-            const mpGestures: string[] = gestureResults?.gestures?.map(
+            const rawFaceLm: FaceLandmark[] | null = faceRes?.faceLandmarks?.[0] ?? null;
+            const smoothedFace = rawFaceLm
+              ? smoothLandmarks(prevFaceLmRef.current, rawFaceLm)
+              : null;
+            prevFaceLmRef.current = smoothedFace;
+
+            const handLms: HandLandmark[][] | null =
+              gestureRes?.landmarks?.length > 0 ? gestureRes.landmarks : null;
+            const mpGestures: string[] = (gestureRes?.gestures ?? []).map(
               (g: any[]) => g?.[0]?.categoryName ?? 'None',
-            ) ?? [];
+            );
 
-            const headPose      = faceLm ? computeHeadPose(faceLm)      : null;
-            const faceExpression = faceLm ? computeFaceExpression(faceLm) : null;
+            const headPose      = smoothedFace ? computeHeadPose(smoothedFace)       : null;
+            const faceExpression = smoothedFace ? computeFaceExpression(smoothedFace) : null;
 
-            if (active) {
-              setState(s => ({
-                ...s,
-                faceLandmarks: faceLm,
-                handLandmarks: handLms,
-                recognizedGestures: mpGestures,
-                headPose,
-                faceExpression,
-              }));
-              if (handLms?.length) processGesture(handLms[0], mpGestures[0]??'None');
-              else gestureHoldRef.current = null;
-              if (headPose && faceExpression) processFaceEvents(faceExpression, headPose);
+            setState(s => ({
+              ...s,
+              faceLandmarks:      smoothedFace,
+              handLandmarks:      handLms,
+              recognizedGestures: mpGestures,
+              headPose,
+              faceExpression,
+            }));
+
+            // ── Gesture processing ──
+            if (handLms?.length) {
+              processGestureInline(handLms[0], mpGestures[0] ?? 'None');
+            } else {
+              gestureHoldRef.current = null;
             }
+
+            // ── Face event processing ──
+            if (headPose && faceExpression) {
+              processFaceEventsInline(faceExpression, headPose);
+            }
+
           } catch { /* skip bad frame */ }
-
-          rafRef.current = requestAnimationFrame(detectFrame);
-        };
-
-        rafRef.current = requestAnimationFrame(detectFrame);
+        }, 67); // ~15 fps
       })
       .catch(err => {
         timers.forEach(clearTimeout);
         if (!active) return;
-        setState(s => ({ ...s, isLoading:false, error:err.message, isReady:false, loadingProgress:0 }));
+        setState(s => ({
+          ...s,
+          isLoading: false,
+          isReady: false,
+          error: String(err?.message ?? 'Failed to load AR'),
+          loadingProgress: 0,
+        }));
       });
 
     return () => {
       active = false;
       timers.forEach(clearTimeout);
-      stopLoop();
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     };
-  }, [enabled, videoRef, processGesture, processFaceEvents, stopLoop]);
+  }, [enabled]); // Only re-run when enabled changes — NOT when callbacks change
+
+  // ── Inline helpers that use refs (no deps, stable across renders) ──
+  function processGestureInline(landmarks: HandLandmark[], mpGestureName: string) {
+    if (!cbGesture.current) return;
+
+    let gestureName: GestureName = 'none';
+    if (mpGestureName && mpGestureName !== 'None') {
+      gestureName = MP_GESTURE_MAP[mpGestureName] ?? 'none';
+    }
+    if (gestureName === 'none') {
+      const r = detectGesture(landmarks);
+      if (r.confidence > 0.72) gestureName = r.name;
+    }
+    if (gestureName === 'none') { gestureHoldRef.current = null; return; }
+
+    const now = Date.now();
+    if (!gestureHoldRef.current || gestureHoldRef.current.name !== gestureName) {
+      gestureHoldRef.current = { name: gestureName, since: now };
+      return;
+    }
+    if (
+      now - gestureHoldRef.current.since > 550 &&
+      lastTriggeredRef.current !== gestureName
+    ) {
+      lastTriggeredRef.current = gestureName;
+      cbGesture.current(gestureName);
+      setTimeout(() => { lastTriggeredRef.current = 'none'; }, 1600);
+    }
+  }
+
+  function processFaceEventsInline(expr: FaceExpression, pose: HeadPose) {
+    const now = Date.now();
+    if (expr.mouthOpen && now - lastMouthOpenRef.current > 3000) {
+      lastMouthOpenRef.current = now;
+      cbMouthOpen.current?.();
+    }
+    if ((expr.eyeBlinkLeft || expr.eyeBlinkRight) && now - lastBlinkRef.current > 1500) {
+      lastBlinkRef.current = now;
+      cbBlink.current?.(
+        expr.eyeBlinkLeft && expr.eyeBlinkRight ? 'both'
+          : expr.eyeBlinkLeft ? 'left' : 'right',
+      );
+    }
+    if (expr.smiling && now - lastSmileRef.current > 4000) {
+      lastSmileRef.current = now;
+      cbSmile.current?.();
+    }
+    if (expr.eyeBrowsRaised && now - lastBrowRef.current > 3000) {
+      lastBrowRef.current = now;
+      cbBrowRaise.current?.();
+    }
+    if (
+      Math.abs(pose.tiltAngle) > 16 &&
+      now - lastTiltRef.current > 2500 &&
+      (
+        Math.sign(pose.tiltAngle) !== Math.sign(prevTiltRef.current) ||
+        Math.abs(pose.tiltAngle - prevTiltRef.current) > 10
+      )
+    ) {
+      lastTiltRef.current = now;
+      prevTiltRef.current = pose.tiltAngle;
+      cbHeadTilt.current?.(pose.tiltAngle);
+    } else if (Math.abs(pose.tiltAngle) <= 16) {
+      prevTiltRef.current = pose.tiltAngle;
+    }
+  }
 
   return state;
 }

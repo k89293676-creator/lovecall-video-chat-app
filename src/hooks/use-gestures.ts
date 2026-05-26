@@ -27,50 +27,51 @@ function dist2D(a: Landmark, b: Landmark): number {
   return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 }
 
+/**
+ * Robust finger extension check combining:
+ * - y-axis: tip above pip (standard upright hand)
+ * - length ratio: tip farther from mcp than pip (works for tilted/sideways hand)
+ */
 function isFingerExtended(tip: Landmark, pip: Landmark, mcp: Landmark): boolean {
-  return tip.y < pip.y && pip.y < mcp.y;
+  const byY      = tip.y < pip.y - 0.01;
+  const tipDist  = dist2D(tip, mcp);
+  const pipDist  = dist2D(pip, mcp);
+  const byLength = tipDist > pipDist * 1.35;
+  return byY || byLength;
 }
 
-function isFingerCurled(tip: Landmark, pip: Landmark): boolean {
-  return tip.y > pip.y;
-}
-
-function isThumbExtendedRight(tip: Landmark, ip: Landmark, mcp: Landmark): boolean {
-  return tip.x > ip.x && ip.x > mcp.x;
-}
-
-function isThumbExtendedLeft(tip: Landmark, ip: Landmark, mcp: Landmark): boolean {
-  return tip.x < ip.x && ip.x < mcp.x;
+function isFingerCurled(tip: Landmark, pip: Landmark, mcp: Landmark): boolean {
+  return !isFingerExtended(tip, pip, mcp);
 }
 
 function isThumbExtended(tip: Landmark, ip: Landmark, mcp: Landmark): boolean {
-  return isThumbExtendedRight(tip, ip, mcp) || isThumbExtendedLeft(tip, ip, mcp);
+  // Works for both left/right hands and tilted orientations
+  const byX     = Math.abs(tip.x - mcp.x) > Math.abs(ip.x - mcp.x) * 1.2;
+  const tipDist  = dist2D(tip, mcp);
+  const ipDist   = dist2D(ip, mcp);
+  const byLength = tipDist > ipDist * 1.3;
+  return byX || byLength;
 }
 
 export function detectGesture(landmarks: Landmark[]): GestureResult {
   if (!landmarks || landmarks.length < 21) return { name: 'none', confidence: 0 };
 
-  const wrist       = landmarks[0];
-  const thumbCmc    = landmarks[1];
-  const thumbMcp    = landmarks[2];
-  const thumbIp     = landmarks[3];
-  const thumbTip    = landmarks[4];
-  const indexMcp    = landmarks[5];
-  const indexPip    = landmarks[6];
-  const indexDip    = landmarks[7];
-  const indexTip    = landmarks[8];
-  const middleMcp   = landmarks[9];
-  const middlePip   = landmarks[10];
-  const middleDip   = landmarks[11];
-  const middleTip   = landmarks[12];
-  const ringMcp     = landmarks[13];
-  const ringPip     = landmarks[14];
-  const ringDip     = landmarks[15];
-  const ringTip     = landmarks[16];
-  const pinkyMcp    = landmarks[17];
-  const pinkyPip    = landmarks[18];
-  const pinkyDip    = landmarks[19];
-  const pinkyTip    = landmarks[20];
+  const wrist    = landmarks[0];
+  const thumbMcp = landmarks[2];
+  const thumbIp  = landmarks[3];
+  const thumbTip = landmarks[4];
+  const indexMcp = landmarks[5];
+  const indexPip = landmarks[6];
+  const indexTip = landmarks[8];
+  const middleMcp = landmarks[9];
+  const middlePip = landmarks[10];
+  const middleTip = landmarks[12];
+  const ringMcp  = landmarks[13];
+  const ringPip  = landmarks[14];
+  const ringTip  = landmarks[16];
+  const pinkyMcp = landmarks[17];
+  const pinkyPip = landmarks[18];
+  const pinkyTip = landmarks[20];
 
   const handSize = dist2D(wrist, middleMcp);
   if (handSize < 0.01) return { name: 'none', confidence: 0 };
@@ -81,83 +82,82 @@ export function detectGesture(landmarks: Landmark[]): GestureResult {
   const ring   = isFingerExtended(ringTip, ringPip, ringMcp);
   const pinky  = isFingerExtended(pinkyTip, pinkyPip, pinkyMcp);
 
-  const thumbUp = thumbTip.y < thumbMcp.y - handSize * 0.3;
-  const thumbDown = thumbTip.y > thumbMcp.y + handSize * 0.3;
+  const thumbUp   = thumbTip.y < thumbMcp.y - handSize * 0.28;
+  const thumbDown = thumbTip.y > thumbMcp.y + handSize * 0.28;
 
   const pinchDist  = dist2D(thumbTip, indexTip);
   const pinchRatio = pinchDist / handSize;
 
-  // ── OK sign: thumb + index form circle, other 3 extended ──
-  if (pinchRatio < 0.28 && middle && ring && pinky) {
-    return { name: 'ok_sign', confidence: 0.87 };
-  }
+  const indexMiddleDist = dist2D(indexTip, middleTip);
 
-  // ── Open palm: all 5 ──
+  // ── Check from most-specific to least-specific ──
+
+  // Open palm: ALL 5 extended
   if (index && middle && ring && pinky && thumb) {
-    return { name: 'open_palm', confidence: 0.92 };
+    return { name: 'open_palm', confidence: 0.93 };
   }
 
-  // ── Pinch: thumb+index close, middle/ring/pinky curled ──
-  if (pinchRatio < 0.22 && !middle && !ring) {
-    return { name: 'pinch', confidence: 0.88 };
+  // OK sign: thumb+index pinched, other 3 extended
+  if (pinchRatio < 0.28 && middle && ring && pinky) {
+    return { name: 'ok_sign', confidence: 0.88 };
   }
 
-  // ── Peace: index+middle up, ring/pinky down ──
-  if (index && middle && !ring && !pinky) {
-    return { name: 'peace', confidence: 0.88 };
+  // Spider-man: index + pinky + thumb extended, middle + ring curled
+  if (index && !middle && !ring && pinky && thumb) {
+    return { name: 'spider_man', confidence: 0.85 };
   }
 
-  // ── Rock on: index+pinky, middle+ring curled, thumb tucked ──
+  // Rock on: index + pinky extended, middle+ring curled, thumb tucked
   if (index && !middle && !ring && pinky && !thumb) {
-    return { name: 'rock_on', confidence: 0.86 };
+    return { name: 'rock_on', confidence: 0.87 };
   }
 
-  // ── Call me: pinky+thumb extended, index/middle/ring curled ──
+  // Heart hand: pinch close but all fingers curled (small round shape)
+  if (!index && !middle && !ring && !pinky && pinchRatio < 0.35) {
+    return { name: 'heart_hand', confidence: 0.80 };
+  }
+
+  // Call me: pinky + thumb, no other fingers
   if (!index && !middle && !ring && pinky && thumb) {
-    return { name: 'call_me', confidence: 0.84 };
+    return { name: 'call_me', confidence: 0.85 };
   }
 
-  // ── L-shape: thumb out, index up, other 3 curled ──
+  // L-shape: thumb + index, no others
   if (index && !middle && !ring && !pinky && thumb) {
     return { name: 'l_shape', confidence: 0.83 };
   }
 
-  // ── Spider-man: index + pinky + thumb extended, middle + ring curled ──
-  if (index && !middle && !ring && pinky && thumb) {
-    return { name: 'spider_man', confidence: 0.82 };
+  // Crossed fingers: index+middle close together, ring+pinky down
+  if (index && middle && !ring && !pinky && indexMiddleDist < handSize * 0.20) {
+    return { name: 'crossed_fingers', confidence: 0.81 };
   }
 
-  // ── Crossed fingers: index+middle close in X pattern ──
-  const indexMiddleDist = dist2D(indexTip, middleTip);
-  if (index && middle && !ring && !pinky && indexMiddleDist < handSize * 0.18) {
-    return { name: 'crossed_fingers', confidence: 0.80 };
+  // Peace: index+middle up and spread, ring+pinky down
+  if (index && middle && !ring && !pinky) {
+    return { name: 'peace', confidence: 0.88 };
   }
 
-  // ── Heart hand: thumb+index curled toward each other at top of palm ──
-  const thumbIndexMidDist = dist2D(
-    { x: (thumbTip.x + indexTip.x) / 2, y: (thumbTip.y + indexTip.y) / 2, z: 0 },
-    { x: wrist.x, y: wrist.y, z: 0 }
-  );
-  if (!index && !middle && !ring && !pinky && pinchRatio < 0.35 && thumbIndexMidDist > handSize * 0.6) {
-    return { name: 'heart_hand', confidence: 0.79 };
-  }
-
-  // ── Thumbs up: only thumb up, all fingers curled ──
+  // Thumbs up: thumb clearly up, all fingers curled
   if (thumbUp && !index && !middle && !ring && !pinky) {
-    return { name: 'thumbs_up', confidence: 0.86 };
+    return { name: 'thumbs_up', confidence: 0.87 };
   }
 
-  // ── Thumbs down: thumb pointing down ──
+  // Thumbs down: thumb clearly down, all fingers curled
   if (thumbDown && !index && !middle && !ring && !pinky) {
-    return { name: 'thumbs_down', confidence: 0.84 };
+    return { name: 'thumbs_down', confidence: 0.85 };
   }
 
-  // ── Fist: nothing extended ──
+  // Fist: nothing extended
   if (!index && !middle && !ring && !pinky && !thumb) {
-    return { name: 'fist', confidence: 0.82 };
+    return { name: 'fist', confidence: 0.83 };
   }
 
-  // ── Point: only index extended ──
+  // Pinch: thumb+index close, others curled
+  if (pinchRatio < 0.24 && !middle && !ring) {
+    return { name: 'pinch', confidence: 0.86 };
+  }
+
+  // Point: only index
   if (index && !middle && !ring && !pinky && !thumb) {
     return { name: 'point', confidence: 0.84 };
   }
@@ -168,7 +168,7 @@ export function detectGesture(landmarks: Landmark[]): GestureResult {
 export const GESTURE_LABELS: Record<GestureName, string> = {
   open_palm:       'Open Palm',
   pinch:           'Pinch',
-  peace:           'Peace',
+  peace:           'Peace ✌️',
   thumbs_up:       'Thumbs Up',
   thumbs_down:     'Thumbs Down',
   fist:            'Fist',

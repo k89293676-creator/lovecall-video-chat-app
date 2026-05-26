@@ -125,9 +125,15 @@ export default function Room() {
 
   // Pass localVideoRef directly — useAR reads .current inside its effect,
   // so it always has the live element even if it mounts after first render.
+  // AR runs whenever gesture mode is ON *or* any AR accessory is active
+  const anyARActive = store.activeEffects.some(e =>
+    e.startsWith('ar_') || e === 'filter_motion_bloom' || e === 'filter_light_trails',
+  );
+  const arEnabled = mediaReady && (store.gestureMode || anyARActive);
+
   const arState = useAR({
     videoRef: localVideoRef as React.RefObject<HTMLVideoElement>,
-    enabled: mediaReady && store.gestureMode,
+    enabled: arEnabled,
     onGesture: handleARGesture,
     onSmile: handleFaceSmile,
     onMouthOpen: handleMouthOpen,

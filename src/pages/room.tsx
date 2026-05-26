@@ -101,6 +101,8 @@ export default function Room() {
       case 'crossed_fingers':
         floatEmoji('🤞'); spawnStars(cx, cy, 10);
         sendMessage?.({ type: 'reaction', emoji: '🤞' }); break;
+      case 'point':
+        state.setDrawingMode(!state.isDrawingMode); floatEmoji('☝️'); break;
     }
   }, [sendMessage, floatEmoji, toggleEffectTimed]);
 

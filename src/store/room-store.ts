@@ -11,7 +11,7 @@ export interface ChatMessage {
   id: string; text: string; from: 'me' | 'partner'; timestamp: number;
 }
 
-export type DrawTool = 'pen' | 'eraser' | 'spray' | 'neon' | 'stamp';
+export type DrawTool = 'pen' | 'eraser' | 'spray' | 'neon' | 'stamp' | 'rainbow' | 'watercolor' | 'glow' | 'marker';
 export type DrawAction = 'undo' | 'redo' | 'clear' | 'save' | null;
 
 export interface MotionPoint { cx: number; cy: number; area: number; }

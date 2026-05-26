@@ -14,8 +14,8 @@ import {
   Wand2, Settings2, Music, X,
   Eye, Droplet, Snowflake, Sun, Target, Heart,
   Gamepad2, EyeOff, Pencil, Eraser, Undo2, Redo2,
-  Download, Sparkles, Star, Wind,
-  Contrast, Activity,
+  Download, Sparkles, Star, Wind, Zap,
+  Contrast, Activity, PaintBucket,
 } from 'lucide-react';
 
 interface ToolboxProps {
@@ -147,6 +147,18 @@ function ARSection({ onAchievement }: { onAchievement?: (a: { title: string; emo
           <EffectButton active={activeEffects.includes('ar_lip_red')}    onClick={() => { toggleEffect('ar_lip_red');    const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>❤️</span>}>Lip Red</EffectButton>
           <EffectButton active={activeEffects.includes('ar_eye_blue')}   onClick={() => { toggleEffect('ar_eye_blue');   const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>💙</span>}>Eye Shadow Blue</EffectButton>
           <EffectButton active={activeEffects.includes('ar_eye_purple')} onClick={() => { toggleEffect('ar_eye_purple'); const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>💜</span>}>Eye Shadow Purple</EffectButton>
+        </div>
+      </div>
+      <div className="space-y-2.5">
+        <h4 className="text-xs uppercase tracking-widest text-primary font-semibold">Face AR — Cute Extras</h4>
+        <div className="grid grid-cols-2 gap-2">
+          <EffectButton active={activeEffects.includes('ar_blush')}        onClick={() => { toggleEffect('ar_blush');        const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>🌸</span>}>Blush</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_freckles')}     onClick={() => { toggleEffect('ar_freckles');     const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>🟤</span>}>Freckles</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_dog_ears')}     onClick={() => { toggleEffect('ar_dog_ears');     const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>🐶</span>}>Dog Ears</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_bear_ears')}    onClick={() => { toggleEffect('ar_bear_ears');    const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>🐻</span>}>Bear Ears</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_flower_crown')} onClick={() => { toggleEffect('ar_flower_crown'); const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>🌺</span>}>Flower Crown</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_eyelash')}      onClick={() => { toggleEffect('ar_eyelash');      const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>👁️</span>}>Eyelashes</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_iris_glow')}    onClick={() => { toggleEffect('ar_iris_glow');    const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>🌈</span>}>Iris Glow</EffectButton>
         </div>
       </div>
       <div className="space-y-2.5">
@@ -369,11 +381,15 @@ function FiltersSection() {
 }
 
 const DRAW_TOOLS: { id: DrawTool; label: string; icon: React.ReactNode }[] = [
-  { id: 'pen',    label: 'Pen',    icon: <Pencil className="w-3.5 h-3.5" /> },
-  { id: 'neon',   label: 'Neon',   icon: <Sparkles className="w-3.5 h-3.5" /> },
-  { id: 'spray',  label: 'Spray',  icon: <Wind className="w-3.5 h-3.5" /> },
-  { id: 'eraser', label: 'Eraser', icon: <Eraser className="w-3.5 h-3.5" /> },
-  { id: 'stamp',  label: 'Stamp',  icon: <span className="text-sm">🖊</span> },
+  { id: 'pen',       label: 'Pen',       icon: <Pencil className="w-3.5 h-3.5" /> },
+  { id: 'marker',    label: 'Marker',    icon: <PaintBucket className="w-3.5 h-3.5" /> },
+  { id: 'neon',      label: 'Neon',      icon: <Sparkles className="w-3.5 h-3.5" /> },
+  { id: 'glow',      label: 'Glow',      icon: <Zap className="w-3.5 h-3.5" /> },
+  { id: 'rainbow',   label: 'Rainbow',   icon: <span className="text-sm">🌈</span> },
+  { id: 'watercolor',label: 'Water',     icon: <Droplet className="w-3.5 h-3.5" /> },
+  { id: 'spray',     label: 'Spray',     icon: <Wind className="w-3.5 h-3.5" /> },
+  { id: 'eraser',    label: 'Eraser',    icon: <Eraser className="w-3.5 h-3.5" /> },
+  { id: 'stamp',     label: 'Stamp',     icon: <span className="text-sm">🖊</span> },
 ];
 
 const STAMP_EMOJIS = ['❤️','💕','🌙','✨','🔥','🎉','🦋','🌸','💋','⭐','🌈','🎨'];
@@ -405,7 +421,7 @@ function DrawSection() {
         <>
           <div className="space-y-2">
             <h4 className="text-xs uppercase tracking-widest text-primary font-semibold">Tool</h4>
-            <div className="grid grid-cols-5 gap-1">
+            <div className="grid grid-cols-3 gap-1">
               {DRAW_TOOLS.map(t => (
                 <button key={t.id}
                   onClick={() => setDrawTool(t.id)}

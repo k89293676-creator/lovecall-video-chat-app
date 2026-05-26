@@ -54,6 +54,8 @@ export function CanvasOverlay({ sendMessage }: CanvasOverlayProps) {
   }, []);
 
   // Render a stroke on a given canvas context
+  const rainbowHueRef = useRef(0);
+
   const renderStroke = useCallback((
     ctx: CanvasRenderingContext2D,
     pos: { x: number; y: number },
@@ -61,6 +63,7 @@ export function CanvasOverlay({ sendMessage }: CanvasOverlayProps) {
     tool: string, color: string, size: number, opacity: number, emoji?: string,
   ) => {
     const alpha = opacity / 100;
+
     if (tool === 'eraser') {
       ctx.globalCompositeOperation = 'destination-out';
       ctx.globalAlpha = 1;
@@ -68,6 +71,7 @@ export function CanvasOverlay({ sendMessage }: CanvasOverlayProps) {
       if (last) { ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(pos.x, pos.y); ctx.stroke(); }
       ctx.globalCompositeOperation = 'source-over'; return;
     }
+
     if (tool === 'spray') {
       ctx.globalCompositeOperation = 'source-over';
       ctx.globalAlpha = alpha * 0.35; ctx.fillStyle = color;
@@ -78,6 +82,7 @@ export function CanvasOverlay({ sendMessage }: CanvasOverlayProps) {
       }
       ctx.globalAlpha = 1; return;
     }
+
     if (tool === 'neon') {
       ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = alpha;
       ctx.shadowColor = color; ctx.shadowBlur = size * 4; ctx.strokeStyle = color;
@@ -89,12 +94,64 @@ export function CanvasOverlay({ sendMessage }: CanvasOverlayProps) {
       }
       ctx.shadowBlur = 0; ctx.globalAlpha = 1; return;
     }
+
+    if (tool === 'glow') {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = alpha * 0.55;
+      ctx.strokeStyle = color; ctx.shadowColor = color; ctx.shadowBlur = size * 7;
+      ctx.lineWidth = size * 1.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      if (last) { ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(pos.x, pos.y); ctx.stroke(); }
+      // soft outer corona
+      ctx.globalAlpha = alpha * 0.15; ctx.shadowBlur = size * 14; ctx.lineWidth = size * 3;
+      if (last) { ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(pos.x, pos.y); ctx.stroke(); }
+      ctx.shadowBlur = 0; ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; return;
+    }
+
+    if (tool === 'rainbow') {
+      rainbowHueRef.current = (rainbowHueRef.current + 3) % 360;
+      const rc = `hsl(${rainbowHueRef.current},100%,58%)`;
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = alpha;
+      ctx.strokeStyle = rc; ctx.shadowColor = rc; ctx.shadowBlur = size * 2;
+      ctx.lineWidth = size; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      if (last) { ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(pos.x, pos.y); ctx.stroke(); }
+      ctx.shadowBlur = 0; ctx.globalAlpha = 1; return;
+    }
+
+    if (tool === 'watercolor') {
+      ctx.globalCompositeOperation = 'source-over';
+      const spread = size * 2.2;
+      // Soft layered blobs
+      for (let i = 0; i < 10; i++) {
+        const rx = (Math.random() - 0.5) * spread, ry = (Math.random() - 0.5) * spread;
+        const r = size * (0.7 + Math.random() * 0.9);
+        ctx.globalAlpha = alpha * 0.10;
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(pos.x + rx, pos.y + ry, r, 0, Math.PI * 2); ctx.fill();
+      }
+      if (last) {
+        ctx.globalAlpha = alpha * 0.06;
+        ctx.strokeStyle = color; ctx.lineWidth = size * 2.5; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(pos.x, pos.y); ctx.stroke();
+      }
+      ctx.globalAlpha = 1; return;
+    }
+
+    if (tool === 'marker') {
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = alpha * 0.72;
+      ctx.strokeStyle = color; ctx.lineWidth = size * 3;
+      ctx.lineCap = 'square'; ctx.lineJoin = 'miter';
+      if (last) { ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(pos.x, pos.y); ctx.stroke(); }
+      ctx.globalAlpha = 1; return;
+    }
+
     if (tool === 'stamp' && emoji) {
       ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = alpha;
       ctx.font = `${size * 6}px serif`;
       ctx.fillText(emoji, pos.x - size * 3, pos.y + size * 3);
       ctx.globalAlpha = 1; return;
     }
+
+    // Default pen — smooth bezier with pressure (speed → width)
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = alpha;
     ctx.strokeStyle = color; ctx.lineWidth = size; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     if (last) { ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(pos.x, pos.y); ctx.stroke(); }
@@ -191,7 +248,7 @@ export function CanvasOverlay({ sendMessage }: CanvasOverlayProps) {
     return () => window.removeEventListener('peer-draw', handler);
   }, [renderStroke]);
 
-  // Ambient effects canvas
+  // Ambient effects canvas — deps [] intentionally: reads live state via getState() each frame
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -222,15 +279,16 @@ export function CanvasOverlay({ sendMessage }: CanvasOverlayProps) {
       const state = useRoomStore.getState();
       const effects = state.activeEffects;
       const motion = state.motionData;
+      // Read mode live — avoids restarting this effect when mode changes
+      const mc = getModeConfig(state.mode);
 
       // ── AMBIENT MODE BORDER GLOW ──
       {
         const borderW = 12 + Math.sin(time * 0.03) * 3;
-        const intensity = 0.35 + Math.sin(time * 0.04) * 0.1;
         ctx.save();
-        ctx.shadowColor = modeConfig.primaryColor;
+        ctx.shadowColor = mc.primaryColor;
         ctx.shadowBlur = borderW * 1.5;
-        ctx.strokeStyle = modeConfig.primaryColor + '40';
+        ctx.strokeStyle = mc.primaryColor + '40';
         ctx.lineWidth = borderW;
         ctx.strokeRect(borderW / 2, borderW / 2, W - borderW, H - borderW);
         ctx.restore();
@@ -250,7 +308,7 @@ export function CanvasOverlay({ sendMessage }: CanvasOverlayProps) {
           ctx.fillText(['✦', '✧', '⋆', '★'][i % 4], sx - 6, sy + 6);
         }
         const rg = ctx.createRadialGradient(mx, my, 0, mx, my, 60 * intensity);
-        rg.addColorStop(0, modeConfig.primaryColor + '40');
+        rg.addColorStop(0, mc.primaryColor + '40');
         rg.addColorStop(1, 'transparent');
         ctx.globalAlpha = intensity;
         ctx.fillStyle = rg;
@@ -268,9 +326,9 @@ export function CanvasOverlay({ sendMessage }: CanvasOverlayProps) {
           for (let i = 1; i < trail.length; i++) {
             const age = (now - trail[i].t) / 800;
             ctx.globalAlpha = (1 - age) * 0.7;
-            ctx.shadowColor = modeConfig.primaryColor;
+            ctx.shadowColor = mc.primaryColor;
             ctx.shadowBlur = 12;
-            ctx.strokeStyle = modeConfig.primaryColor;
+            ctx.strokeStyle = mc.primaryColor;
             ctx.beginPath();
             ctx.moveTo(trail[i - 1].x, trail[i - 1].y);
             ctx.lineTo(trail[i].x, trail[i].y);
@@ -488,7 +546,7 @@ export function CanvasOverlay({ sendMessage }: CanvasOverlayProps) {
       window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animId);
     };
-  }, [activeEffects, mode]);
+  }, []); // intentionally empty — reads live state via getState() each frame
 
   // Resize draw canvas and partner canvas
   useEffect(() => {
@@ -552,15 +610,8 @@ export function CanvasOverlay({ sendMessage }: CanvasOverlayProps) {
 
   const stopDraw = useCallback(() => { isDrawingRef.current = false; lastPosRef.current = null; }, []);
 
-  useEffect(() => {
-    if (!isDrawingMode) {
-      historyRef.current = []; historyIndexRef.current = -1;
-      const canvas = drawCanvasRef.current;
-      if (canvas) canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
-      const pc = partnerCanvasRef.current;
-      if (pc) pc.getContext('2d')?.clearRect(0, 0, pc.width, pc.height);
-    }
-  }, [isDrawingMode]);
+  // Preserve drawing history when toggling drawing mode on/off
+  // Only clear on explicit 'clear' action — not on mode toggle
 
   const getCursorStyle = () => {
     if (!isDrawingMode) return 'default';

@@ -101,6 +101,7 @@ const L_EYE_OUT=33, R_EYE_OUT=263;
 const NOSE_TIP=4, FOREHEAD=10, CHIN=152;
 const U_LIP=13, L_LIP=14, L_MOUTH=61, R_MOUTH=291;
 const L_CHEEK=234, R_CHEEK=454;
+const L_IRIS=468, R_IRIS=473;
 
 /**
  * Map a normalized MediaPipe landmark to canvas screen coords.
@@ -385,6 +386,142 @@ function drawHeadTiltIndicator(ctx: CanvasRenderingContext2D, pose: HeadPose, ca
   ctx.restore();
 }
 
+function drawBlush(ctx: CanvasRenderingContext2D, f: FaceLandmark[], rect: DOMRect) {
+  const lc=lp(f,L_CHEEK,rect), rc=lp(f,R_CHEEK,rect); if (!lc||!rc) return;
+  const edPx=eyeDistPx(f,rect), r=edPx*0.3;
+  ctx.save();
+  for (const pt of [lc,rc]) {
+    const g=ctx.createRadialGradient(pt.x,pt.y,0,pt.x,pt.y,r);
+    g.addColorStop(0,'rgba(255,100,120,0.52)'); g.addColorStop(1,'transparent');
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.ellipse(pt.x,pt.y,r,r*0.65,0,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawFreckles(ctx: CanvasRenderingContext2D, f: FaceLandmark[], rect: DOMRect) {
+  const nose=lp(f,NOSE_TIP,rect), lc=lp(f,L_CHEEK,rect), rc=lp(f,R_CHEEK,rect);
+  if (!nose||!lc||!rc) return;
+  const edPx=eyeDistPx(f,rect);
+  ctx.save(); ctx.fillStyle='rgba(130,70,40,0.55)';
+  const spots=[
+    {x:nose.x-edPx*0.08,y:nose.y-4},{x:nose.x+edPx*0.08,y:nose.y-4},
+    {x:nose.x-edPx*0.15,y:nose.y+7},{x:nose.x+edPx*0.15,y:nose.y+7},
+    {x:lc.x+edPx*0.10,y:lc.y-edPx*0.04},{x:lc.x+edPx*0.18,y:lc.y+edPx*0.02},{x:lc.x+edPx*0.04,y:lc.y+edPx*0.07},
+    {x:rc.x-edPx*0.10,y:rc.y-edPx*0.04},{x:rc.x-edPx*0.18,y:rc.y+edPx*0.02},{x:rc.x-edPx*0.04,y:rc.y+edPx*0.07},
+  ];
+  for (const s of spots) { ctx.beginPath(); ctx.arc(s.x,s.y,2.2,0,Math.PI*2); ctx.fill(); }
+  ctx.restore();
+}
+
+function drawDogEars(ctx: CanvasRenderingContext2D, f: FaceLandmark[], rect: DOMRect) {
+  const top=lp(f,FOREHEAD,rect), le=lp(f,L_EYE_OUT,rect), re=lp(f,R_EYE_OUT,rect);
+  if (!top||!le||!re) return;
+  const edPx=eyeDistPx(f,rect), t=Date.now()/1000;
+  ctx.save();
+  for (const [dx,dir] of [[-edPx*0.5,-1],[edPx*0.5,1]] as [number,number][]) {
+    ctx.save();
+    ctx.translate(top.x+dx,top.y-10);
+    ctx.rotate(dir*0.75+Math.sin(t*1.5)*0.08*dir);
+    const g=ctx.createLinearGradient(0,0,0,edPx*0.6);
+    g.addColorStop(0,'#9B6B45'); g.addColorStop(1,'#5C3A1E');
+    ctx.fillStyle=g; ctx.shadowColor='rgba(60,30,10,0.4)'; ctx.shadowBlur=10;
+    ctx.beginPath(); ctx.ellipse(0,edPx*0.3,edPx*0.16,edPx*0.38,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(180,110,95,0.75)'; ctx.shadowBlur=0;
+    ctx.beginPath(); ctx.ellipse(0,edPx*0.32,edPx*0.09,edPx*0.22,0,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawBearEars(ctx: CanvasRenderingContext2D, f: FaceLandmark[], rect: DOMRect) {
+  const top=lp(f,FOREHEAD,rect), le=lp(f,L_EYE_OUT,rect), re=lp(f,R_EYE_OUT,rect);
+  if (!top||!le||!re) return;
+  const edPx=eyeDistPx(f,rect);
+  ctx.save();
+  for (const dx of [-edPx*0.44,edPx*0.44]) {
+    const ex=top.x+dx, ey=top.y-edPx*0.06;
+    ctx.fillStyle='#6B4226'; ctx.shadowColor='rgba(50,20,5,0.4)'; ctx.shadowBlur=8;
+    ctx.beginPath(); ctx.arc(ex,ey,edPx*0.145,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(175,110,90,0.85)'; ctx.shadowBlur=0;
+    ctx.beginPath(); ctx.arc(ex,ey,edPx*0.08,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawFlowerCrown(ctx: CanvasRenderingContext2D, f: FaceLandmark[], rect: DOMRect) {
+  const top=lp(f,FOREHEAD,rect), le=lp(f,L_EYE_OUT,rect), re=lp(f,R_EYE_OUT,rect);
+  if (!top||!le||!re) return;
+  const edPx=eyeDistPx(f,rect), t=Date.now()/1000;
+  const FLOWERS=[
+    {dx:-edPx*0.55,dy:-edPx*0.02,sz:9, p:5,hue:330},
+    {dx:-edPx*0.30,dy:-edPx*0.18,sz:11,p:6,hue:280},
+    {dx:0,          dy:-edPx*0.26,sz:13,p:7,hue:50},
+    {dx: edPx*0.30,dy:-edPx*0.18,sz:11,p:6,hue:140},
+    {dx: edPx*0.55,dy:-edPx*0.02,sz:9, p:5,hue:200},
+  ];
+  ctx.save();
+  // Vine
+  ctx.strokeStyle='rgba(50,110,30,0.65)'; ctx.lineWidth=2.5; ctx.setLineDash([4,7]);
+  ctx.beginPath();
+  ctx.moveTo(top.x-edPx*0.62,top.y+2);
+  ctx.quadraticCurveTo(top.x,top.y-edPx*0.32,top.x+edPx*0.62,top.y+2);
+  ctx.stroke(); ctx.setLineDash([]);
+  for (const fl of FLOWERS) {
+    const fx=top.x+fl.dx, fy=top.y+fl.dy+Math.sin(t*1.1+fl.dx)*1.5;
+    for (let i=0;i<fl.p;i++) {
+      const a=(i/fl.p)*Math.PI*2;
+      ctx.fillStyle=`hsl(${fl.hue+i*8},80%,72%)`;
+      ctx.shadowColor=`hsl(${fl.hue},70%,55%)`; ctx.shadowBlur=5;
+      ctx.beginPath();
+      ctx.ellipse(fx+Math.cos(a)*fl.sz*0.58,fy+Math.sin(a)*fl.sz*0.58,fl.sz*0.44,fl.sz*0.32,a,0,Math.PI*2);
+      ctx.fill();
+    }
+    ctx.fillStyle='#FFD700'; ctx.shadowColor='#FFB300'; ctx.shadowBlur=8;
+    ctx.beginPath(); ctx.arc(fx,fy,fl.sz*0.32,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#FFA500'; ctx.shadowBlur=0;
+    ctx.beginPath(); ctx.arc(fx,fy,fl.sz*0.14,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawEyelashes(ctx: CanvasRenderingContext2D, f: FaceLandmark[], rect: DOMRect) {
+  const le=lp(f,L_EYE_CEN,rect), re=lp(f,R_EYE_CEN,rect);
+  if (!le||!re) return;
+  const edPx=eyeDistPx(f,rect), lashCount=9, lashLen=edPx*0.17;
+  ctx.save(); ctx.strokeStyle='#100808'; ctx.lineWidth=1.8; ctx.lineCap='round';
+  for (const eye of [le,re]) {
+    const eyeW=edPx*0.27;
+    for (let i=0;i<lashCount;i++) {
+      const t2=i/(lashCount-1);
+      const lx=eye.x-eyeW+t2*eyeW*2;
+      const ly=eye.y-edPx*0.07;
+      const curve=(t2-0.5)*0.55;
+      const len=lashLen*(1-Math.abs(t2-0.5)*0.45);
+      ctx.beginPath(); ctx.moveTo(lx,ly);
+      ctx.bezierCurveTo(lx+curve*edPx*0.1,ly-len*0.5,lx+curve*edPx*0.18,ly-len*0.8,lx+curve*edPx*0.14,ly-len);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+function drawIrisGlow(ctx: CanvasRenderingContext2D, f: FaceLandmark[], rect: DOMRect) {
+  const lIris=lp(f,L_IRIS,rect), rIris=lp(f,R_IRIS,rect);
+  if (!lIris||!rIris) return;
+  const edPx=eyeDistPx(f,rect), r=edPx*0.09;
+  const hue=(Date.now()/30)%360;
+  ctx.save(); ctx.globalCompositeOperation='screen';
+  for (const iris of [lIris,rIris]) {
+    const g=ctx.createRadialGradient(iris.x,iris.y,0,iris.x,iris.y,r*2.8);
+    g.addColorStop(0,`hsla(${hue},100%,70%,0.65)`);
+    g.addColorStop(0.5,`hsla(${(hue+40)%360},90%,60%,0.3)`);
+    g.addColorStop(1,'transparent');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(iris.x,iris.y,r*2.8,0,Math.PI*2); ctx.fill();
+  }
+  ctx.globalCompositeOperation='source-over'; ctx.restore();
+}
+
 function drawLipColor(ctx: CanvasRenderingContext2D, f: FaceLandmark[], rect: DOMRect, color: string) {
   const uLip=lp(f,U_LIP,rect), lLip=lp(f,L_LIP,rect);
   const lMouth=lp(f,L_MOUTH,rect), rMouth=lp(f,R_MOUTH,rect);
@@ -583,6 +720,13 @@ export function ARFaceOverlay({ faceLandmarks, handLandmarks, headPose, faceExpr
         if (fx('ar_curly_mustache'))   drawMustache(ctx,f,rect,'curly');
         if (fx('ar_beard'))            drawBeard(ctx,f,rect);
         if (fx('ar_rose'))             drawRose(ctx,f,rect);
+        if (fx('ar_blush'))            drawBlush(ctx,f,rect);
+        if (fx('ar_freckles'))         drawFreckles(ctx,f,rect);
+        if (fx('ar_dog_ears'))         drawDogEars(ctx,f,rect);
+        if (fx('ar_bear_ears'))        drawBearEars(ctx,f,rect);
+        if (fx('ar_flower_crown'))     drawFlowerCrown(ctx,f,rect);
+        if (fx('ar_eyelash'))          drawEyelashes(ctx,f,rect);
+        if (fx('ar_iris_glow'))        drawIrisGlow(ctx,f,rect);
         if (fx('ar_lip_pink'))         drawLipColor(ctx,f,rect,'#ff6b9d');
         if (fx('ar_lip_red'))          drawLipColor(ctx,f,rect,'#cc1133');
         if (fx('ar_eye_blue'))         drawEyeShadow(ctx,f,rect,'rgba(80,130,255,0.85)');

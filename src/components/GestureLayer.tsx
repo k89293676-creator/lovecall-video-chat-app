@@ -19,11 +19,11 @@ interface GestureLayerProps {
 }
 
 const GESTURE_LABELS: Record<string, string> = {
-  wave:           'Wave 👋',
-  bigmove:        'Big Move 💥',
-  stillness_break:'You're back! ✨',
-  circle:         'Circle 🔄',
-  double_burst:   'Double! ⚡',
+  wave:            'Wave',
+  bigmove:         'Big Move',
+  stillness_break: 'Back!',
+  circle:          'Circle',
+  double_burst:    'Double!',
 };
 
 export function GestureLayer({ videoRef, onGestureReaction, sendMessage }: GestureLayerProps) {
@@ -40,10 +40,10 @@ export function GestureLayer({ videoRef, onGestureReaction, sendMessage }: Gestu
     lastGestureRef.current = now;
 
     const emoji = modeConfig.gestureEmoji;
-    const label = GESTURE_LABELS[e.type] ?? e.type;
+    const labelBase = GESTURE_LABELS[e.type] ?? e.type;
+    const label = `${emoji} ${labelBase}`;
     const id = `${now}-${Math.random()}`;
 
-    // Show visual feedback at gesture centroid
     setFeedbacks(f => [...f, {
       id, emoji, label,
       x: Math.round(e.cx * 100),
@@ -51,12 +51,10 @@ export function GestureLayer({ videoRef, onGestureReaction, sendMessage }: Gestu
     }]);
     setTimeout(() => setFeedbacks(f => f.filter(fb => fb.id !== id)), 2200);
 
-    // Trigger mode-appropriate AR response
     if (e.type === 'wave') {
       onGestureReaction?.(emoji);
       sendMessage?.({ type: 'reaction', emoji });
     } else if (e.type === 'bigmove') {
-      // Toggle confetti for big move
       if (!activeEffects.includes('filter_confetti')) toggleEffect('filter_confetti');
       setTimeout(() => {
         if (useRoomStore.getState().activeEffects.includes('filter_confetti')) {
@@ -64,7 +62,6 @@ export function GestureLayer({ videoRef, onGestureReaction, sendMessage }: Gestu
         }
       }, 4000);
     } else if (e.type === 'circle') {
-      // Toggle sparkle for circle
       if (!activeEffects.includes('filter_sparkle')) toggleEffect('filter_sparkle');
       setTimeout(() => {
         if (useRoomStore.getState().activeEffects.includes('filter_sparkle')) {
@@ -123,7 +120,6 @@ export function GestureLayer({ videoRef, onGestureReaction, sendMessage }: Gestu
         </div>
       ))}
 
-      {/* Gesture mode indicator dot */}
       <div className="absolute top-4 left-4 z-30">
         <div
           className="w-2 h-2 rounded-full bg-green-400 animate-pulse"

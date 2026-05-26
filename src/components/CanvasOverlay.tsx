@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { useRoomStore } from '@/store/room-store';
+import { getModeConfig } from '@/lib/modes';
+
+interface TrailPoint { x: number; y: number; t: number; }
 
 interface Particle {
   x: number; y: number; vx: number; vy: number;
@@ -7,7 +10,7 @@ interface Particle {
   color: string; emoji?: string; rotation?: number; rotV?: number;
 }
 
-function mkParticles(count: number, w: number, h: number, init: (i: number) => Particle): Particle[] {
+function mkParticles(count: number, init: (i: number) => Particle): Particle[] {
   return Array.from({ length: count }, (_, i) => init(i));
 }
 
@@ -19,12 +22,15 @@ export function CanvasOverlay() {
   const historyRef = useRef<ImageData[]>([]);
   const historyIndexRef = useRef(-1);
   const particlesRef = useRef<Record<string, Particle[]>>({});
+  const trailRef = useRef<TrailPoint[]>([]);
 
   const {
     activeEffects, isDrawingMode, drawColor, drawSize,
-    drawTool, drawOpacity, stampEmoji,
-    drawAction, clearDrawAction,
+    drawTool, drawOpacity, stampEmoji, drawAction, clearDrawAction,
+    motionData, mode,
   } = useRoomStore();
+
+  const modeConfig = getModeConfig(mode);
 
   const saveHistory = useCallback(() => {
     const canvas = drawCanvasRef.current;
@@ -45,17 +51,11 @@ export function CanvasOverlay() {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-
     if (drawAction === 'undo') {
       const idx = historyIndexRef.current - 1;
-      if (idx >= 0) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.putImageData(historyRef.current[idx], 0, 0);
-        historyIndexRef.current = idx;
-      } else {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        historyIndexRef.current = -1;
-      }
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (idx >= 0) { ctx.putImageData(historyRef.current[idx], 0, 0); historyIndexRef.current = idx; }
+      else historyIndexRef.current = -1;
     } else if (drawAction === 'redo') {
       const idx = historyIndexRef.current + 1;
       if (idx < historyRef.current.length) {
@@ -79,16 +79,23 @@ export function CanvasOverlay() {
     const handleKey = (e: KeyboardEvent) => {
       if (!isDrawingMode) return;
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') {
-        e.preventDefault();
-        useRoomStore.getState().triggerDrawAction('undo');
-      } else if ((e.ctrlKey || e.metaKey) && (e.shiftKey && e.key === 'z' || e.key === 'y')) {
-        e.preventDefault();
-        useRoomStore.getState().triggerDrawAction('redo');
+        e.preventDefault(); useRoomStore.getState().triggerDrawAction('undo');
+      } else if ((e.ctrlKey || e.metaKey) && (e.shiftKey ? e.key === 'z' : e.key === 'y')) {
+        e.preventDefault(); useRoomStore.getState().triggerDrawAction('redo');
       }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [isDrawingMode]);
+
+  // Motion trail update
+  useEffect(() => {
+    if (motionData?.hasMotion !== false && motionData) {
+      const W = window.innerWidth, H = window.innerHeight;
+      trailRef.current.push({ x: motionData.cx * W, y: motionData.cy * H, t: Date.now() });
+      if (trailRef.current.length > 20) trailRef.current.shift();
+    }
+  }, [motionData]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -109,7 +116,7 @@ export function CanvasOverlay() {
 
     const ensureParticles = (key: string, count: number, factory: (i: number) => Particle) => {
       if (!particlesRef.current[key]) {
-        particlesRef.current[key] = mkParticles(count, canvas.width, canvas.height, factory);
+        particlesRef.current[key] = mkParticles(count, factory);
       }
       return particlesRef.current[key];
     };
@@ -117,215 +124,274 @@ export function CanvasOverlay() {
     const render = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       const W = canvas.width, H = canvas.height;
+      const state = useRoomStore.getState();
+      const effects = state.activeEffects;
+      const motion = state.motionData;
 
-      if (activeEffects.includes('filter_wax')) {
+      // ── AMBIENT MODE BORDER GLOW ─────────────────────────────────────────────
+      {
+        const borderW = 12 + Math.sin(time * 0.03) * 3;
+        const intensity = 0.35 + Math.sin(time * 0.04) * 0.1;
+        const g = ctx.createLinearGradient(0, 0, 0, H);
+        const col = modeConfig.glowColor.replace(')', `, ${intensity})`).replace('rgba(', 'rgba(').replace('0.5)', `${intensity})`);
+        // top
+        ctx.save();
+        ctx.shadowColor = modeConfig.primaryColor;
+        ctx.shadowBlur = borderW * 1.5;
+        ctx.strokeStyle = modeConfig.primaryColor + '40';
+        ctx.lineWidth = borderW;
+        ctx.strokeRect(borderW/2, borderW/2, W - borderW, H - borderW);
+        ctx.restore();
+      }
+
+      // ── MOTION BLOOM ─────────────────────────────────────────────────────────
+      if (effects.includes('filter_motion_bloom') && motion) {
+        const mx = motion.cx * W, my = motion.cy * H;
+        const intensity = Math.min(motion.area * 8, 1);
+        for (let i = 0; i < 8; i++) {
+          const angle = (i / 8) * Math.PI * 2 + time * 0.05;
+          const r = 20 + Math.sin(time * 0.1 + i) * 15;
+          const sx = mx + Math.cos(angle) * r;
+          const sy = my + Math.sin(angle) * r;
+          ctx.globalAlpha = intensity * (0.5 + Math.sin(time * 0.12 + i) * 0.4);
+          ctx.font = `${10 + Math.sin(time * 0.08 + i) * 4}px serif`;
+          ctx.fillText(['✦','✧','⋆','★'][i % 4], sx - 6, sy + 6);
+        }
+        // bloom ring
+        const rg = ctx.createRadialGradient(mx, my, 0, mx, my, 60 * intensity);
+        rg.addColorStop(0, modeConfig.primaryColor + '40');
+        rg.addColorStop(1, 'transparent');
+        ctx.globalAlpha = intensity;
+        ctx.fillStyle = rg;
+        ctx.beginPath(); ctx.arc(mx, my, 60 * intensity, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      // ── LIGHT TRAILS ─────────────────────────────────────────────────────────
+      if (effects.includes('filter_light_trails') && trailRef.current.length > 1) {
+        const now = Date.now();
+        const trail = trailRef.current.filter(p => now - p.t < 800);
+        if (trail.length > 1) {
+          ctx.save();
+          ctx.lineWidth = 4;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          for (let i = 1; i < trail.length; i++) {
+            const age = (now - trail[i].t) / 800;
+            const alpha = (1 - age) * 0.7;
+            ctx.globalAlpha = alpha;
+            ctx.shadowColor = modeConfig.primaryColor;
+            ctx.shadowBlur = 12;
+            ctx.strokeStyle = modeConfig.primaryColor;
+            ctx.beginPath();
+            ctx.moveTo(trail[i-1].x, trail[i-1].y);
+            ctx.lineTo(trail[i].x, trail[i].y);
+            ctx.stroke();
+          }
+          ctx.globalAlpha = 1;
+          ctx.shadowBlur = 0;
+          ctx.restore();
+        }
+      }
+
+      // ── FILM GRAIN ───────────────────────────────────────────────────────────
+      if (effects.includes('filter_film_grain')) {
+        ctx.save();
+        for (let i = 0; i < 800; i++) {
+          const x = Math.random() * W, y = Math.random() * H;
+          const bright = Math.random() > 0.5;
+          ctx.fillStyle = bright ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.04)';
+          ctx.fillRect(x, y, 1.5, 1.5);
+        }
+        // Vignette tint
+        const vg = ctx.createRadialGradient(W/2, H/2, W*0.25, W/2, H/2, W*0.75);
+        vg.addColorStop(0, 'rgba(0,0,0,0)');
+        vg.addColorStop(1, 'rgba(10,5,5,0.45)');
+        ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+        ctx.restore();
+      }
+
+      // ── KALEIDOSCOPE FRAME ───────────────────────────────────────────────────
+      if (effects.includes('filter_kaleidoscope')) {
+        const SEGMENTS = 8;
+        ctx.save();
+        for (let s = 0; s < SEGMENTS; s++) {
+          const angle = (s / SEGMENTS) * Math.PI * 2 + time * 0.005;
+          const r1 = Math.min(W, H) * 0.44;
+          const r2 = r1 + 18 + Math.sin(time * 0.04 + s) * 8;
+          const hue = (s * 45 + time * 0.5) % 360;
+          ctx.strokeStyle = `hsla(${hue},70%,65%,0.35)`;
+          ctx.lineWidth = 2 + Math.sin(time * 0.06 + s) * 1;
+          ctx.shadowColor = `hsl(${hue},80%,60%)`;
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.arc(W/2, H/2, r2, angle, angle + Math.PI * 2 / SEGMENTS);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      // ── WAX DRIP ────────────────────────────────────────────────────────────
+      if (effects.includes('filter_wax')) {
         for (let i = 0; i < 6; i++) {
           const x = (Math.sin(time * 0.01 + i * 1.2) * 0.5 + 0.5) * W;
           const y = (time * 1.5 + i * 140) % H;
           const g = ctx.createRadialGradient(x, y, 0, x, y, 8);
-          g.addColorStop(0, 'rgba(220,40,40,0.7)');
-          g.addColorStop(1, 'rgba(180,20,20,0)');
+          g.addColorStop(0, 'rgba(220,40,40,0.7)'); g.addColorStop(1, 'rgba(180,20,20,0)');
           ctx.fillStyle = g;
           ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.fill();
           ctx.fillStyle = 'rgba(255,80,80,0.4)';
-          ctx.beginPath(); ctx.ellipse(x, y + 6, 3, 10, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(x, y+6, 3, 10, 0, 0, Math.PI*2); ctx.fill();
         }
       }
 
-      if (activeEffects.includes('filter_ice')) {
-        ctx.fillStyle = 'rgba(100,180,255,0.08)';
-        ctx.fillRect(0, 0, W, H);
-        ctx.strokeStyle = 'rgba(160,220,255,0.12)';
-        ctx.lineWidth = 1;
+      if (effects.includes('filter_ice')) {
+        ctx.fillStyle = 'rgba(100,180,255,0.08)'; ctx.fillRect(0, 0, W, H);
+        ctx.strokeStyle = 'rgba(160,220,255,0.12)'; ctx.lineWidth = 1;
         for (let i = 0; i < 8; i++) {
           const x = (Math.sin(i * 2.3) * 0.5 + 0.5) * W;
-          ctx.beginPath();
-          ctx.moveTo(x, 0);
-          ctx.lineTo(x + Math.sin(time * 0.005) * 50, H);
-          ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + Math.sin(time*0.005)*50, H); ctx.stroke();
         }
       }
 
-      if (activeEffects.includes('filter_blindfold')) {
+      if (effects.includes('filter_blindfold')) {
         const gradient = ctx.createRadialGradient(W/2, H*0.4, 80, W/2, H/2, W/1.3);
-        gradient.addColorStop(0, 'rgba(0,0,0,0)');
-        gradient.addColorStop(0.5, 'rgba(0,0,0,0.5)');
-        gradient.addColorStop(1, 'rgba(0,0,0,0.95)');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, W, H);
-        const bandH = H * 0.12, bandY = H * 0.3;
-        const sg = ctx.createLinearGradient(0, bandY, 0, bandY + bandH);
-        sg.addColorStop(0, 'rgba(20,10,30,0.85)');
-        sg.addColorStop(0.5, 'rgba(40,20,60,0.9)');
-        sg.addColorStop(1, 'rgba(20,10,30,0.85)');
-        ctx.fillStyle = sg;
-        ctx.fillRect(0, bandY, W, bandH);
+        gradient.addColorStop(0, 'rgba(0,0,0,0)'); gradient.addColorStop(0.5, 'rgba(0,0,0,0.5)'); gradient.addColorStop(1, 'rgba(0,0,0,0.95)');
+        ctx.fillStyle = gradient; ctx.fillRect(0, 0, W, H);
+        const bandH = H*0.12, bandY = H*0.3;
+        const sg = ctx.createLinearGradient(0, bandY, 0, bandY+bandH);
+        sg.addColorStop(0,'rgba(20,10,30,0.85)'); sg.addColorStop(0.5,'rgba(40,20,60,0.9)'); sg.addColorStop(1,'rgba(20,10,30,0.85)');
+        ctx.fillStyle = sg; ctx.fillRect(0, bandY, W, bandH);
       }
 
-      if (activeEffects.includes('filter_vignette')) {
+      if (effects.includes('filter_vignette')) {
         const vg = ctx.createRadialGradient(W/2, H/2, W*0.2, W/2, H/2, W*0.8);
-        vg.addColorStop(0, 'rgba(0,0,0,0)');
-        vg.addColorStop(1, 'rgba(0,0,0,0.7)');
-        ctx.fillStyle = vg;
-        ctx.fillRect(0, 0, W, H);
+        vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,0.7)');
+        ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
       }
 
-      if (activeEffects.includes('filter_hearts')) {
+      if (effects.includes('filter_hearts')) {
         for (let i = 0; i < 5; i++) {
-          const phase = (time * 0.008 + i * 0.7) % 1;
-          const x = (Math.sin(i * 2.4 + time * 0.004) * 0.4 + 0.5) * W;
-          const y = H - phase * H * 1.2;
-          const opacity = phase < 0.1 ? phase * 10 : phase > 0.8 ? (1 - phase) * 5 : 0.7;
-          ctx.font = `${20 + Math.sin(time * 0.05 + i) * 4}px serif`;
-          ctx.globalAlpha = opacity;
-          ctx.fillText(['❤️','💕','💗','💖','💝'][i % 5], x, y);
-          ctx.globalAlpha = 1;
+          const phase = (time*0.008+i*0.7)%1;
+          const x = (Math.sin(i*2.4+time*0.004)*0.4+0.5)*W;
+          const y = H - phase*H*1.2;
+          const opacity = phase<0.1?phase*10:phase>0.8?(1-phase)*5:0.7;
+          ctx.font=`${20+Math.sin(time*0.05+i)*4}px serif`;
+          ctx.globalAlpha=opacity;
+          ctx.fillText(['❤️','💕','💗','💖','💝'][i%5],x,y);
+          ctx.globalAlpha=1;
         }
       }
 
-      if (activeEffects.includes('filter_starfall')) {
+      if (effects.includes('filter_starfall')) {
         const stars = ensureParticles('starfall', 40, (i) => ({
-          x: Math.random() * W, y: Math.random() * H,
-          vx: (Math.random() - 0.5) * 0.5, vy: 0.4 + Math.random() * 0.8,
-          life: Math.random(), maxLife: 1,
-          size: 1 + Math.random() * 2.5, color: '#fff',
+          x: Math.random()*W, y: Math.random()*H,
+          vx: (Math.random()-0.5)*0.5, vy: 0.4+Math.random()*0.8,
+          life: Math.random(), maxLife: 1, size: 1+Math.random()*2.5, color: '#fff',
         }));
         stars.forEach(s => {
-          s.x += s.vx; s.y += s.vy;
-          if (s.y > H) { s.y = -5; s.x = Math.random() * W; }
-          const twinkle = 0.4 + Math.abs(Math.sin(time * 0.05 + s.x)) * 0.6;
-          ctx.globalAlpha = twinkle;
-          ctx.fillStyle = '#fff';
-          ctx.shadowColor = '#adf';
-          ctx.shadowBlur = 6;
-          ctx.beginPath();
-          ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.shadowBlur = 0;
-          ctx.globalAlpha = twinkle * 0.3;
-          ctx.strokeStyle = '#adf';
-          ctx.lineWidth = 0.5;
-          ctx.beginPath();
-          ctx.moveTo(s.x, s.y - s.size * 3);
-          ctx.lineTo(s.x, s.y + s.size * 3);
-          ctx.moveTo(s.x - s.size * 3, s.y);
-          ctx.lineTo(s.x + s.size * 3, s.y);
-          ctx.stroke();
-          ctx.globalAlpha = 1;
+          s.x+=s.vx; s.y+=s.vy;
+          if(s.y>H){s.y=-5;s.x=Math.random()*W;}
+          const tw=0.4+Math.abs(Math.sin(time*0.05+s.x))*0.6;
+          ctx.globalAlpha=tw; ctx.fillStyle='#fff';
+          ctx.shadowColor='#adf'; ctx.shadowBlur=6;
+          ctx.beginPath(); ctx.arc(s.x,s.y,s.size,0,Math.PI*2); ctx.fill();
+          ctx.shadowBlur=0;
+          ctx.globalAlpha=tw*0.3; ctx.strokeStyle='#adf'; ctx.lineWidth=0.5;
+          ctx.beginPath(); ctx.moveTo(s.x,s.y-s.size*3); ctx.lineTo(s.x,s.y+s.size*3);
+          ctx.moveTo(s.x-s.size*3,s.y); ctx.lineTo(s.x+s.size*3,s.y); ctx.stroke();
+          ctx.globalAlpha=1;
         });
       }
 
-      if (activeEffects.includes('filter_aurora')) {
-        const bands = [
-          { color1: 'rgba(0,255,180,0)', color2: 'rgba(0,255,180,0.12)', offset: 0 },
-          { color1: 'rgba(100,80,255,0)', color2: 'rgba(100,80,255,0.10)', offset: 0.3 },
-          { color1: 'rgba(255,80,180,0)', color2: 'rgba(255,80,180,0.08)', offset: 0.6 },
+      if (effects.includes('filter_aurora')) {
+        const bands=[
+          {c1:'rgba(0,255,180,0)',c2:'rgba(0,255,180,0.12)',o:0},
+          {c1:'rgba(100,80,255,0)',c2:'rgba(100,80,255,0.10)',o:0.3},
+          {c1:'rgba(255,80,180,0)',c2:'rgba(255,80,180,0.08)',o:0.6},
         ];
-        bands.forEach(({ color1, color2, offset }) => {
-          const wave = Math.sin(time * 0.005 + offset * 10) * H * 0.08;
-          const yTop = H * 0.1 + wave + offset * H * 0.12;
-          const g = ctx.createLinearGradient(0, yTop, 0, yTop + H * 0.35);
-          g.addColorStop(0, color1);
-          g.addColorStop(0.4, color2);
-          g.addColorStop(1, color1);
-          ctx.fillStyle = g;
-          ctx.beginPath();
-          ctx.moveTo(0, yTop);
-          for (let x = 0; x <= W; x += 20) {
-            const y = yTop + Math.sin(x * 0.008 + time * 0.008 + offset * 5) * H * 0.06;
-            ctx.lineTo(x, y);
+        bands.forEach(({c1,c2,o})=>{
+          const wave=Math.sin(time*0.005+o*10)*H*0.08;
+          const yTop=H*0.1+wave+o*H*0.12;
+          const g=ctx.createLinearGradient(0,yTop,0,yTop+H*0.35);
+          g.addColorStop(0,c1); g.addColorStop(0.4,c2); g.addColorStop(1,c1);
+          ctx.fillStyle=g;
+          ctx.beginPath(); ctx.moveTo(0,yTop);
+          for(let x=0;x<=W;x+=20){
+            const y=yTop+Math.sin(x*0.008+time*0.008+o*5)*H*0.06;
+            ctx.lineTo(x,y);
           }
-          ctx.lineTo(W, yTop + H * 0.35);
-          ctx.lineTo(0, yTop + H * 0.35);
-          ctx.closePath();
-          ctx.fill();
+          ctx.lineTo(W,yTop+H*0.35); ctx.lineTo(0,yTop+H*0.35); ctx.closePath(); ctx.fill();
         });
       }
 
-      if (activeEffects.includes('filter_butterflies')) {
-        const BUTTERS = ['🦋', '🌸', '🦋', '🌺', '🦋'];
-        for (let i = 0; i < 5; i++) {
-          const t2 = time * 0.006 + i * 1.3;
-          const x = (Math.sin(t2 * 0.7 + i) * 0.4 + 0.5) * W;
-          const y = (Math.cos(t2 * 0.5 + i * 0.8) * 0.35 + 0.5) * H;
-          const wingFlap = Math.abs(Math.sin(time * 0.15 + i));
-          ctx.save();
-          ctx.translate(x, y);
-          ctx.scale(wingFlap * 0.5 + 0.7, 1);
-          ctx.font = `${22 + Math.sin(time * 0.04 + i) * 3}px serif`;
-          ctx.globalAlpha = 0.75;
-          ctx.fillText(BUTTERS[i % BUTTERS.length], -12, 8);
-          ctx.restore();
-          ctx.globalAlpha = 1;
+      if (effects.includes('filter_butterflies')) {
+        const BUTTERS=['🦋','🌸','🦋','🌺','🦋'];
+        for(let i=0;i<5;i++){
+          const t2=time*0.006+i*1.3;
+          const x=(Math.sin(t2*0.7+i)*0.4+0.5)*W;
+          const y=(Math.cos(t2*0.5+i*0.8)*0.35+0.5)*H;
+          const wf=Math.abs(Math.sin(time*0.15+i));
+          ctx.save(); ctx.translate(x,y); ctx.scale(wf*0.5+0.7,1);
+          ctx.font=`${22+Math.sin(time*0.04+i)*3}px serif`;
+          ctx.globalAlpha=0.75;
+          ctx.fillText(BUTTERS[i%BUTTERS.length],-12,8);
+          ctx.restore(); ctx.globalAlpha=1;
         }
       }
 
-      if (activeEffects.includes('filter_confetti')) {
-        const COLORS = ['#e11d48','#ec4899','#f59e0b','#22c55e','#3b82f6','#8b5cf6','#fff'];
+      if (effects.includes('filter_confetti')) {
+        const COLORS=['#e11d48','#ec4899','#f59e0b','#22c55e','#3b82f6','#8b5cf6','#fff'];
         const confetti = ensureParticles('confetti', 50, (i) => ({
-          x: Math.random() * W, y: Math.random() * H,
-          vx: (Math.random() - 0.5) * 1.5, vy: 1 + Math.random() * 2,
-          life: 1, maxLife: 1, size: 4 + Math.random() * 5,
-          color: COLORS[i % COLORS.length],
-          rotation: Math.random() * Math.PI * 2, rotV: (Math.random() - 0.5) * 0.15,
+          x: Math.random()*W, y: Math.random()*H,
+          vx: (Math.random()-0.5)*1.5, vy: 1+Math.random()*2,
+          life:1,maxLife:1,size:4+Math.random()*5,color:COLORS[i%COLORS.length],
+          rotation:Math.random()*Math.PI*2,rotV:(Math.random()-0.5)*0.15,
         }));
-        confetti.forEach(c => {
-          c.x += c.vx + Math.sin(time * 0.03 + c.y * 0.01) * 0.5;
-          c.y += c.vy;
-          c.rotation! += c.rotV!;
-          if (c.y > H + 10) { c.y = -10; c.x = Math.random() * W; }
-          ctx.save();
-          ctx.translate(c.x, c.y);
-          ctx.rotate(c.rotation!);
-          ctx.fillStyle = c.color;
-          ctx.globalAlpha = 0.85;
-          ctx.fillRect(-c.size/2, -c.size/4, c.size, c.size/2);
-          ctx.restore();
-          ctx.globalAlpha = 1;
+        confetti.forEach(c=>{
+          c.x+=c.vx+Math.sin(time*0.03+c.y*0.01)*0.5; c.y+=c.vy;
+          c.rotation!+=c.rotV!;
+          if(c.y>H+10){c.y=-10;c.x=Math.random()*W;}
+          ctx.save(); ctx.translate(c.x,c.y); ctx.rotate(c.rotation!);
+          ctx.fillStyle=c.color; ctx.globalAlpha=0.85;
+          ctx.fillRect(-c.size/2,-c.size/4,c.size,c.size/2);
+          ctx.restore(); ctx.globalAlpha=1;
         });
       }
 
-      if (activeEffects.includes('filter_petals')) {
-        const PETALS = ['🌸', '🌺', '🌷', '🌹'];
+      if (effects.includes('filter_petals')) {
+        const PETALS=['🌸','🌺','🌷','🌹'];
         const petals = ensureParticles('petals', 18, (i) => ({
-          x: Math.random() * W, y: Math.random() * H,
-          vx: (Math.random() - 0.5) * 0.7, vy: 0.5 + Math.random() * 1,
-          life: 1, maxLife: 1, size: 14 + Math.random() * 8,
-          color: '#e11d48', rotation: Math.random() * Math.PI * 2, rotV: (Math.random() - 0.5) * 0.05,
-          emoji: PETALS[i % PETALS.length],
+          x:Math.random()*W,y:Math.random()*H,
+          vx:(Math.random()-0.5)*0.7,vy:0.5+Math.random()*1,
+          life:1,maxLife:1,size:14+Math.random()*8,color:'#e11d48',
+          rotation:Math.random()*Math.PI*2,rotV:(Math.random()-0.5)*0.05,
+          emoji:PETALS[i%PETALS.length],
         }));
-        petals.forEach(p => {
-          p.x += p.vx + Math.sin(time * 0.02 + p.y * 0.01) * 0.6;
-          p.y += p.vy;
-          p.rotation! += p.rotV!;
-          if (p.y > H + 20) { p.y = -20; p.x = Math.random() * W; }
-          ctx.save();
-          ctx.translate(p.x, p.y);
-          ctx.rotate(p.rotation!);
-          ctx.font = `${p.size}px serif`;
-          ctx.globalAlpha = 0.8;
-          ctx.fillText(p.emoji!, -p.size/2, p.size/2);
-          ctx.restore();
-          ctx.globalAlpha = 1;
+        petals.forEach(p=>{
+          p.x+=p.vx+Math.sin(time*0.02+p.y*0.01)*0.6; p.y+=p.vy;
+          p.rotation!+=p.rotV!;
+          if(p.y>H+20){p.y=-20;p.x=Math.random()*W;}
+          ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rotation!);
+          ctx.font=`${p.size}px serif`; ctx.globalAlpha=0.8;
+          ctx.fillText(p.emoji!,-p.size/2,p.size/2);
+          ctx.restore(); ctx.globalAlpha=1;
         });
       }
 
-      if (activeEffects.includes('filter_sparkle')) {
-        const PTS = [0.25, 0.75, 0.5, 0.15, 0.85, 0.5, 0.35, 0.65];
-        for (let i = 0; i < 4; i++) {
-          const px = PTS[i * 2] * W;
-          const py = PTS[i * 2 + 1] * H;
-          for (let j = 0; j < 6; j++) {
-            const angle = (j / 6) * Math.PI * 2 + time * 0.02 * (i % 2 === 0 ? 1 : -1);
-            const r = 20 + Math.sin(time * 0.05 + j + i) * 10;
-            const sx = px + Math.cos(angle) * r;
-            const sy = py + Math.sin(angle) * r;
-            ctx.globalAlpha = 0.5 + Math.sin(time * 0.07 + j + i) * 0.4;
-            ctx.fillStyle = ['#fff','#fda4af','#fbbf24','#c4b5fd'][i % 4];
-            ctx.font = `${8 + Math.sin(time * 0.05 + j) * 3}px serif`;
-            ctx.fillText('✦', sx - 6, sy + 6);
+      if (effects.includes('filter_sparkle')) {
+        const PTS=[0.25,0.75,0.5,0.15,0.85,0.5,0.35,0.65];
+        for(let i=0;i<4;i++){
+          const px=PTS[i*2]*W, py=PTS[i*2+1]*H;
+          for(let j=0;j<6;j++){
+            const angle=(j/6)*Math.PI*2+time*0.02*(i%2===0?1:-1);
+            const r=20+Math.sin(time*0.05+j+i)*10;
+            ctx.globalAlpha=0.5+Math.sin(time*0.07+j+i)*0.4;
+            ctx.fillStyle=['#fff','#fda4af','#fbbf24','#c4b5fd'][i%4];
+            ctx.font=`${8+Math.sin(time*0.05+j)*3}px serif`;
+            ctx.fillText('✦',px+Math.cos(angle)*r-6,py+Math.sin(angle)*r+6);
           }
-          ctx.globalAlpha = 1;
+          ctx.globalAlpha=1;
         }
       }
 
@@ -338,17 +404,12 @@ export function CanvasOverlay() {
       window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animId);
     };
-  }, [activeEffects]);
+  }, [activeEffects, mode]);
 
   useEffect(() => {
     const canvas = drawCanvasRef.current;
     if (!canvas) return;
-    const resize = () => {
-      const saved = canvas.getContext('2d')?.getImageData(0, 0, canvas.width, canvas.height);
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      if (saved) canvas.getContext('2d')?.putImageData(saved, 0, 0);
-    };
+    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
     resize();
     window.addEventListener('resize', resize);
     return () => window.removeEventListener('resize', resize);
@@ -357,171 +418,92 @@ export function CanvasOverlay() {
   const getPos = (e: React.MouseEvent | React.TouchEvent) => {
     const canvas = drawCanvasRef.current!;
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
+    const scaleX = canvas.width / rect.width, scaleY = canvas.height / rect.height;
     if ('touches' in e) {
-      return {
-        x: (e.touches[0].clientX - rect.left) * scaleX,
-        y: (e.touches[0].clientY - rect.top) * scaleY,
-      };
+      return { x: (e.touches[0].clientX - rect.left)*scaleX, y: (e.touches[0].clientY - rect.top)*scaleY };
     }
-    return {
-      x: ((e as React.MouseEvent).clientX - rect.left) * scaleX,
-      y: ((e as React.MouseEvent).clientY - rect.top) * scaleY,
-    };
+    return { x: ((e as React.MouseEvent).clientX - rect.left)*scaleX, y: ((e as React.MouseEvent).clientY - rect.top)*scaleY };
   };
 
-  const applyStroke = useCallback((ctx: CanvasRenderingContext2D, pos: { x: number; y: number }, last: { x: number; y: number } | null) => {
+  const applyStroke = useCallback((ctx: CanvasRenderingContext2D, pos: {x:number;y:number}, last: {x:number;y:number}|null) => {
     const alpha = drawOpacity / 100;
-
     if (drawTool === 'eraser') {
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.globalAlpha = 1;
-      ctx.lineWidth = drawSize * 4;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      if (last) {
-        ctx.beginPath();
-        ctx.moveTo(last.x, last.y);
-        ctx.lineTo(pos.x, pos.y);
-        ctx.stroke();
-      }
-      ctx.globalCompositeOperation = 'source-over';
-      return;
+      ctx.globalCompositeOperation = 'destination-out'; ctx.globalAlpha = 1;
+      ctx.lineWidth = drawSize*4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      if (last) { ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(pos.x,pos.y); ctx.stroke(); }
+      ctx.globalCompositeOperation = 'source-over'; return;
     }
-
     if (drawTool === 'spray') {
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.globalAlpha = alpha * 0.35;
-      ctx.fillStyle = drawColor;
-      const spread = drawSize * 4;
-      for (let i = 0; i < drawSize * 3; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const radius = Math.random() * spread;
-        ctx.beginPath();
-        ctx.arc(pos.x + Math.cos(angle) * radius, pos.y + Math.sin(angle) * radius, 0.8, 0, Math.PI * 2);
-        ctx.fill();
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = alpha*0.35; ctx.fillStyle = drawColor;
+      const spread = drawSize*4;
+      for(let i=0;i<drawSize*3;i++){
+        const angle=Math.random()*Math.PI*2, radius=Math.random()*spread;
+        ctx.beginPath(); ctx.arc(pos.x+Math.cos(angle)*radius,pos.y+Math.sin(angle)*radius,0.8,0,Math.PI*2); ctx.fill();
       }
-      ctx.globalAlpha = 1;
-      return;
+      ctx.globalAlpha=1; return;
     }
-
     if (drawTool === 'neon') {
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.globalAlpha = alpha;
-      ctx.shadowColor = drawColor;
-      ctx.shadowBlur = drawSize * 4;
-      ctx.strokeStyle = drawColor;
-      ctx.lineWidth = drawSize / 2;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      if (last) {
-        ctx.beginPath();
-        ctx.moveTo(last.x, last.y);
-        ctx.lineTo(pos.x, pos.y);
-        ctx.stroke();
-        ctx.shadowBlur = drawSize * 8;
-        ctx.lineWidth = drawSize / 4;
-        ctx.globalAlpha = alpha * 0.4;
-        ctx.beginPath();
-        ctx.moveTo(last.x, last.y);
-        ctx.lineTo(pos.x, pos.y);
-        ctx.stroke();
-      }
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = 1;
-      return;
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha=alpha;
+      ctx.shadowColor=drawColor; ctx.shadowBlur=drawSize*4; ctx.strokeStyle=drawColor;
+      ctx.lineWidth=drawSize/2; ctx.lineCap='round'; ctx.lineJoin='round';
+      if(last){ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(pos.x,pos.y);ctx.stroke();
+        ctx.shadowBlur=drawSize*8; ctx.lineWidth=drawSize/4; ctx.globalAlpha=alpha*0.4;
+        ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(pos.x,pos.y);ctx.stroke();}
+      ctx.shadowBlur=0; ctx.globalAlpha=1; return;
     }
+    ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=alpha;
+    ctx.strokeStyle=drawColor; ctx.lineWidth=drawSize; ctx.lineCap='round'; ctx.lineJoin='round';
+    if(last){ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(pos.x,pos.y);ctx.stroke();}
+    ctx.globalAlpha=1;
+  }, [drawTool,drawColor,drawSize,drawOpacity]);
 
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = alpha;
-    ctx.strokeStyle = drawColor;
-    ctx.lineWidth = drawSize;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    if (last) {
-      ctx.beginPath();
-      ctx.moveTo(last.x, last.y);
-      ctx.lineTo(pos.x, pos.y);
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-  }, [drawTool, drawColor, drawSize, drawOpacity]);
-
-  const startDraw = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDrawingMode) return;
-    e.preventDefault();
-    const pos = getPos(e);
-
-    if (drawTool === 'stamp') {
-      const canvas = drawCanvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+  const startDraw = useCallback((e: React.MouseEvent|React.TouchEvent) => {
+    if(!isDrawingMode) return; e.preventDefault();
+    const pos=getPos(e);
+    if(drawTool==='stamp'){
+      const canvas=drawCanvasRef.current; if(!canvas) return;
+      const ctx=canvas.getContext('2d'); if(!ctx) return;
       saveHistory();
-      ctx.font = `${drawSize * 6}px serif`;
-      ctx.globalAlpha = drawOpacity / 100;
-      ctx.fillText(stampEmoji, pos.x - drawSize * 3, pos.y + drawSize * 3);
-      ctx.globalAlpha = 1;
-      return;
+      ctx.font=`${drawSize*6}px serif`; ctx.globalAlpha=drawOpacity/100;
+      ctx.fillText(stampEmoji,pos.x-drawSize*3,pos.y+drawSize*3); ctx.globalAlpha=1; return;
     }
+    saveHistory(); isDrawingRef.current=true; lastPosRef.current=pos;
+  }, [isDrawingMode,drawTool,drawSize,stampEmoji,drawOpacity,saveHistory]);
 
-    saveHistory();
-    isDrawingRef.current = true;
-    lastPosRef.current = pos;
-  }, [isDrawingMode, drawTool, drawSize, stampEmoji, drawOpacity, saveHistory]);
+  const draw = useCallback((e: React.MouseEvent|React.TouchEvent) => {
+    if(!isDrawingMode||!isDrawingRef.current) return; e.preventDefault();
+    const canvas=drawCanvasRef.current; if(!canvas) return;
+    const ctx=canvas.getContext('2d'); if(!ctx) return;
+    const pos=getPos(e);
+    applyStroke(ctx,pos,lastPosRef.current);
+    lastPosRef.current=pos;
+  }, [isDrawingMode,applyStroke]);
 
-  const draw = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDrawingMode || !isDrawingRef.current) return;
-    e.preventDefault();
-    const canvas = drawCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const pos = getPos(e);
-    applyStroke(ctx, pos, lastPosRef.current);
-    lastPosRef.current = pos;
-  }, [isDrawingMode, applyStroke]);
+  const stopDraw = useCallback(()=>{isDrawingRef.current=false;lastPosRef.current=null;},[]);
 
-  const stopDraw = useCallback(() => {
-    isDrawingRef.current = false;
-    lastPosRef.current = null;
-  }, []);
-
-  useEffect(() => {
-    if (!isDrawingMode) {
-      historyRef.current = [];
-      historyIndexRef.current = -1;
-      const canvas = drawCanvasRef.current;
-      if (canvas) canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+  useEffect(()=>{
+    if(!isDrawingMode){
+      historyRef.current=[]; historyIndexRef.current=-1;
+      const canvas=drawCanvasRef.current;
+      if(canvas) canvas.getContext('2d')?.clearRect(0,0,canvas.width,canvas.height);
     }
-  }, [isDrawingMode]);
+  },[isDrawingMode]);
 
-  const cursor = () => {
-    if (!isDrawingMode) return 'default';
-    if (drawTool === 'eraser') return 'cell';
-    if (drawTool === 'stamp') return 'copy';
+  const cursor=()=>{
+    if(!isDrawingMode) return 'default';
+    if(drawTool==='eraser') return 'cell';
+    if(drawTool==='stamp') return 'copy';
     return 'crosshair';
   };
 
   return (
     <>
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 z-10 pointer-events-none"
-        style={{ width: '100%', height: '100%' }}
-      />
-      <canvas
-        ref={drawCanvasRef}
-        className={`absolute inset-0 z-20 ${isDrawingMode ? 'pointer-events-auto' : 'pointer-events-none'}`}
-        style={{ width: '100%', height: '100%', cursor: cursor() }}
-        onMouseDown={startDraw}
-        onMouseMove={draw}
-        onMouseUp={stopDraw}
-        onMouseLeave={stopDraw}
-        onTouchStart={startDraw}
-        onTouchMove={draw}
-        onTouchEnd={stopDraw}
+      <canvas ref={canvasRef} className="absolute inset-0 z-10 pointer-events-none" style={{width:'100%',height:'100%'}} />
+      <canvas ref={drawCanvasRef}
+        className={`absolute inset-0 z-20 ${isDrawingMode?'pointer-events-auto':'pointer-events-none'}`}
+        style={{width:'100%',height:'100%',cursor:cursor()}}
+        onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
+        onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={stopDraw}
       />
     </>
   );

@@ -13,6 +13,8 @@ import { RippleCanvas } from '@/components/RippleCanvas';
 import { AchievementToast } from '@/components/AchievementToast';
 import { EmojiReactions } from '@/components/EmojiReactions';
 import { MediaPermissionGate } from '@/components/MediaPermissionGate';
+import { ChatPanel } from '@/components/ChatPanel';
+import { GestureLayer } from '@/components/GestureLayer';
 import { buildFilterStyle } from '@/components/VideoFilter';
 import { getModeConfig } from '@/lib/modes';
 import { checkAndUnlock } from '@/lib/achievements';
@@ -38,13 +40,11 @@ export default function Room() {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
 
-  // Only initialize PeerJS after media is ready (gate complete)
   const { sendMessage } = usePeer(mediaReady ? id : null);
 
   const modeConfig = getModeConfig(store.mode);
   const filterStyle = buildFilterStyle(store.videoFilter, store.brightness, store.warmth, store.contrast);
 
-  // When gate hands us a stream, store it and proceed
   const handleMediaReady = useCallback((media: AcquiredMedia) => {
     store.setLocalStream(media.stream);
     setMediaReady(true);
@@ -69,7 +69,7 @@ export default function Room() {
     }
   }, [store.connectionStatus]);
 
-  // Receive emoji reactions from peer
+  // Peer emoji reactions
   useEffect(() => {
     const handler = (e: CustomEvent<{ emoji: string }>) => {
       const reactId = `${Date.now()}-${Math.random()}`;
@@ -79,6 +79,13 @@ export default function Room() {
     };
     window.addEventListener('peer-reaction' as any, handler as any);
     return () => window.removeEventListener('peer-reaction' as any, handler as any);
+  }, []);
+
+  const handleGestureReaction = useCallback((emoji: string) => {
+    const reactId = `${Date.now()}-${Math.random()}`;
+    const x = 40 + Math.random() * 20;
+    setFloatingReactions(f => [...f, { id: reactId, emoji, x }]);
+    setTimeout(() => setFloatingReactions(f => f.filter(r => r.id !== reactId)), 3000);
   }, []);
 
   const handleAchievement = useCallback((ach: { title: string; emoji: string }) => {
@@ -128,30 +135,33 @@ export default function Room() {
     return () => document.removeEventListener('fullscreenchange', handler);
   }, []);
 
-  // Show permission gate until media is ready
   if (!mediaReady) {
     return <MediaPermissionGate onReady={handleMediaReady} />;
   }
 
   return (
-    <div ref={rootRef} className={`relative w-full h-[100dvh] overflow-hidden flex items-center justify-center ${modeConfig.bgClass}`}>
-
-      {/* Camera-flash overlay for photo capture */}
+    <div
+      ref={rootRef}
+      className={`relative w-full h-[100dvh] overflow-hidden flex items-center justify-center ${modeConfig.bgClass}`}
+    >
+      {/* Photo capture flash */}
       {captureFlash && (
         <div className="absolute inset-0 z-[100] bg-white pointer-events-none capture-flash" />
       )}
 
-      {/* Floating peer reactions */}
+      {/* Floating reactions (peer + gesture) */}
       {floatingReactions.map(r => (
-        <div key={r.id} className="fixed z-50 pointer-events-none select-none text-4xl animate-float-up"
-          style={{ left: `${r.x}%`, bottom: '8rem' }}>
+        <div key={r.id}
+          className="fixed z-50 pointer-events-none select-none text-4xl animate-float-up"
+          style={{ left: `${r.x}%`, bottom: '8rem' }}
+        >
           {r.emoji}
         </div>
       ))}
 
       <ModeParticles mode={store.mode} active={true} />
 
-      {/* Remote Video (full background) */}
+      {/* Remote Video — full background */}
       <div className="absolute inset-0 z-0">
         {store.remoteStream ? (
           <video
@@ -186,19 +196,37 @@ export default function Room() {
         )}
       </div>
 
+      {/* AR + Drawing overlay */}
       <CanvasOverlay />
+
+      {/* Gesture layer — reads local video, fires gesture events */}
+      <GestureLayer
+        videoRef={localVideoRef}
+        onGestureReaction={handleGestureReaction}
+        sendMessage={sendMessage}
+      />
+
       <RippleCanvas onAchievement={handleAchievement} sendMessage={sendMessage} />
       <PrivacyMode />
       <Toolbox onAchievement={handleAchievement} sendMessage={sendMessage} />
       <EmojiReactions sendMessage={sendMessage} />
+      <ChatPanel sendMessage={sendMessage} />
       <AchievementToast achievement={pendingAchievement} onDone={() => setPendingAchievement(null)} />
 
       {/* Local Video PIP */}
-      <div className="absolute bottom-24 right-6 w-32 h-48 md:w-44 md:h-64 bg-black rounded-2xl overflow-hidden shadow-2xl z-20 group transition-transform hover:scale-105"
-        style={{ border: `1px solid ${modeConfig.primaryColor}30`, boxShadow: `0 0 20px ${modeConfig.glowColor}` }}
+      <div
+        className="absolute bottom-24 right-6 w-32 h-48 md:w-44 md:h-64 bg-black rounded-2xl overflow-hidden shadow-2xl z-20 group transition-transform hover:scale-105"
+        style={{
+          border: `1px solid ${modeConfig.primaryColor}30`,
+          boxShadow: `0 0 20px ${modeConfig.glowColor}`,
+        }}
       >
         {store.localStream ? (
-          <video ref={localVideoRef} autoPlay playsInline muted
+          <video
+            ref={localVideoRef}
+            autoPlay
+            playsInline
+            muted
             className="w-full h-full object-cover scale-x-[-1]"
             style={{ filter: filterStyle !== 'none' ? filterStyle : undefined }}
           />
@@ -207,13 +235,32 @@ export default function Room() {
             <VideoOff className="w-8 h-8 text-white/30" />
           </div>
         )}
+        {/* Status badges */}
         <div className="absolute bottom-2 left-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          {!store.audioEnabled && <div className="bg-black/50 p-1.5 rounded-md backdrop-blur-sm"><MicOff className="w-3.5 h-3.5 text-destructive" /></div>}
-          {!store.videoEnabled && <div className="bg-black/50 p-1.5 rounded-md backdrop-blur-sm"><VideoOff className="w-3.5 h-3.5 text-destructive" /></div>}
+          {!store.audioEnabled && (
+            <div className="bg-black/50 p-1.5 rounded-md backdrop-blur-sm">
+              <MicOff className="w-3.5 h-3.5 text-destructive" />
+            </div>
+          )}
+          {!store.videoEnabled && (
+            <div className="bg-black/50 p-1.5 rounded-md backdrop-blur-sm">
+              <VideoOff className="w-3.5 h-3.5 text-destructive" />
+            </div>
+          )}
         </div>
         <div className="absolute top-2 right-2 text-sm opacity-0 group-hover:opacity-100 transition-opacity">
           {modeConfig.emoji}
         </div>
+        {/* Gesture detection glow — indicates motion is being read from this feed */}
+        {store.motionData && store.gestureMode && (
+          <div
+            className="absolute inset-0 pointer-events-none rounded-2xl transition-opacity duration-100"
+            style={{
+              boxShadow: `inset 0 0 ${Math.round(store.motionData.area * 40 + 4)}px ${modeConfig.primaryColor}60`,
+              opacity: store.motionData.area * 5,
+            }}
+          />
+        )}
       </div>
 
       {/* Bottom control bar */}
@@ -287,16 +334,20 @@ export default function Room() {
       <div className="absolute top-4 right-4 z-30 flex items-center gap-2">
         <div className="glass-panel px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs text-white/40">
           <span className="text-base">{modeConfig.emoji}</span>
-          <span>{modeConfig.name}</span>
+          <span>{modeConfig.moodLabel}</span>
           {store.connectionStatus === 'connected' && (
-            <><span className="text-white/20">|</span>
+            <>
+              <span className="text-white/20">|</span>
               <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-green-400/70">Live</span></>
+              <span className="text-green-400/70">Live</span>
+            </>
           )}
           {store.connectionStatus === 'connecting' && (
-            <><span className="text-white/20">|</span>
+            <>
+              <span className="text-white/20">|</span>
               <div className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
-              <span className="text-yellow-400/70">Connecting…</span></>
+              <span className="text-yellow-400/70">Connecting…</span>
+            </>
           )}
         </div>
       </div>

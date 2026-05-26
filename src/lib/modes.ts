@@ -1,10 +1,10 @@
-export type ExperienceMode = 
-  | 'romance' 
-  | 'playful' 
-  | 'chill' 
-  | 'date-night' 
-  | 'intimate' 
-  | 'adventure' 
+export type ExperienceMode =
+  | 'romance'
+  | 'playful'
+  | 'chill'
+  | 'date-night'
+  | 'intimate'
+  | 'adventure'
   | 'celebration';
 
 export interface ModeConfig {
@@ -17,6 +17,10 @@ export interface ModeConfig {
   glowColor: string;
   particleColors: string[];
   particleShape: 'heart' | 'star' | 'circle' | 'confetti' | 'snowflake';
+  autoEffects: string[];        // AR effects auto-enabled on mode switch
+  gestureEmoji: string;         // emoji launched on wave gesture
+  moodLabel: string;            // short label shown in status bar
+  borderGlow: string;           // CSS glow color for video border
 }
 
 export const MODES: ModeConfig[] = [
@@ -30,6 +34,10 @@ export const MODES: ModeConfig[] = [
     glowColor: 'rgba(225,29,72,0.5)',
     particleColors: ['#e11d48', '#be123c', '#fda4af'],
     particleShape: 'heart',
+    autoEffects: ['filter_hearts', 'filter_vignette'],
+    gestureEmoji: '❤️',
+    moodLabel: 'Romantic',
+    borderGlow: 'rgba(225,29,72,0.6)',
   },
   {
     id: 'playful',
@@ -41,6 +49,10 @@ export const MODES: ModeConfig[] = [
     glowColor: 'rgba(139,92,246,0.5)',
     particleColors: ['#8b5cf6', '#a78bfa', '#ec4899'],
     particleShape: 'star',
+    autoEffects: ['filter_sparkle'],
+    gestureEmoji: '⭐',
+    moodLabel: 'Playful',
+    borderGlow: 'rgba(139,92,246,0.6)',
   },
   {
     id: 'chill',
@@ -52,6 +64,10 @@ export const MODES: ModeConfig[] = [
     glowColor: 'rgba(59,130,246,0.5)',
     particleColors: ['#3b82f6', '#93c5fd', '#e0f2fe'],
     particleShape: 'snowflake',
+    autoEffects: ['filter_starfall', 'filter_aurora'],
+    gestureEmoji: '🌙',
+    moodLabel: 'Chilling',
+    borderGlow: 'rgba(59,130,246,0.5)',
   },
   {
     id: 'date-night',
@@ -63,6 +79,10 @@ export const MODES: ModeConfig[] = [
     glowColor: 'rgba(245,158,11,0.5)',
     particleColors: ['#f59e0b', '#fcd34d', '#fef3c7'],
     particleShape: 'circle',
+    autoEffects: ['filter_vignette', 'filter_petals'],
+    gestureEmoji: '🥂',
+    moodLabel: 'Date Night',
+    borderGlow: 'rgba(245,158,11,0.5)',
   },
   {
     id: 'intimate',
@@ -74,6 +94,10 @@ export const MODES: ModeConfig[] = [
     glowColor: 'rgba(236,72,153,0.5)',
     particleColors: ['#ec4899', '#f9a8d4', '#fce7f3'],
     particleShape: 'heart',
+    autoEffects: ['filter_blindfold', 'filter_hearts'],
+    gestureEmoji: '💋',
+    moodLabel: 'Intimate',
+    borderGlow: 'rgba(236,72,153,0.7)',
   },
   {
     id: 'adventure',
@@ -85,6 +109,10 @@ export const MODES: ModeConfig[] = [
     glowColor: 'rgba(34,197,94,0.5)',
     particleColors: ['#22c55e', '#86efac', '#dcfce7'],
     particleShape: 'star',
+    autoEffects: ['filter_butterflies', 'filter_aurora'],
+    gestureEmoji: '🌟',
+    moodLabel: 'Adventurous',
+    borderGlow: 'rgba(34,197,94,0.5)',
   },
   {
     id: 'celebration',
@@ -96,6 +124,10 @@ export const MODES: ModeConfig[] = [
     glowColor: 'rgba(168,85,247,0.5)',
     particleColors: ['#a855f7', '#ec4899', '#f59e0b', '#22c55e', '#3b82f6'],
     particleShape: 'confetti',
+    autoEffects: ['filter_confetti', 'filter_sparkle'],
+    gestureEmoji: '🎊',
+    moodLabel: 'Celebrating',
+    borderGlow: 'rgba(168,85,247,0.6)',
   },
 ];
 

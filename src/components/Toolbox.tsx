@@ -15,7 +15,7 @@ import {
   Eye, Droplet, Snowflake, Sun, Target, Heart,
   Gamepad2, EyeOff, Pencil, Eraser, Undo2, Redo2,
   Download, Sparkles, Star, Wind,
-  Contrast,
+  Contrast, Activity,
 } from 'lucide-react';
 
 interface ToolboxProps {
@@ -31,6 +31,7 @@ export function Toolbox({ onAchievement, sendMessage }: ToolboxProps) {
   const tabs = [
     { id: 'mode',    icon: <span className="text-lg">{modeConfig.emoji}</span>, label: 'Mode' },
     { id: 'ar',      icon: <Wand2 className="w-5 h-5" />,     label: 'AR Effects' },
+    { id: 'gesture', icon: <Activity className="w-5 h-5" />,  label: 'Gestures' },
     { id: 'filters', icon: <Settings2 className="w-5 h-5" />, label: 'Filters' },
     { id: 'draw',    icon: <Pencil className="w-5 h-5" />,    label: 'Draw' },
     { id: 'games',   icon: <Gamepad2 className="w-5 h-5" />,  label: 'Games' },
@@ -60,7 +61,7 @@ export function Toolbox({ onAchievement, sendMessage }: ToolboxProps) {
       </div>
 
       {activeTab && (
-        <div className="glass-panel w-72 max-h-[75vh] rounded-2xl flex flex-col overflow-hidden animate-in slide-in-from-left-4 fade-in duration-300">
+        <div className="glass-panel w-72 max-h-[80vh] rounded-2xl flex flex-col overflow-hidden animate-in slide-in-from-left-4 fade-in duration-300">
           <div className="p-4 border-b border-white/10 flex items-center justify-between bg-black/20 flex-shrink-0">
             <h3 className="text-sm font-serif font-semibold text-white tracking-wide">
               {tabs.find(t => t.id === activeTab)?.label}
@@ -72,6 +73,7 @@ export function Toolbox({ onAchievement, sendMessage }: ToolboxProps) {
           <ScrollArea className="flex-1 p-4">
             {activeTab === 'mode'    && <ModeSelector onClose={() => setActiveTab(null)} onAchievement={onAchievement} />}
             {activeTab === 'ar'      && <ARSection onAchievement={onAchievement} />}
+            {activeTab === 'gesture' && <GestureSection />}
             {activeTab === 'filters' && <FiltersSection />}
             {activeTab === 'draw'    && <DrawSection />}
             {activeTab === 'games'   && <GamePanel onAchievement={onAchievement} sendMessage={sendMessage} />}
@@ -97,24 +99,118 @@ function ARSection({ onAchievement }: { onAchievement?: (a: { title: string; emo
       <div className="space-y-2.5">
         <h4 className="text-xs uppercase tracking-widest text-primary font-semibold">Overlays</h4>
         <div className="grid grid-cols-2 gap-2">
-          <EffectButton active={isActive('hearts')}      onClick={() => toggle('hearts')}      icon={<Heart className="w-4 h-4" />}>Floating Hearts</EffectButton>
-          <EffectButton active={isActive('starfall')}    onClick={() => toggle('starfall')}    icon={<Star className="w-4 h-4" />}>Starfall</EffectButton>
-          <EffectButton active={isActive('aurora')}      onClick={() => toggle('aurora')}      icon={<Wind className="w-4 h-4" />}>Aurora</EffectButton>
-          <EffectButton active={isActive('butterflies')} onClick={() => toggle('butterflies')} icon={<span>🦋</span>}>Butterflies</EffectButton>
-          <EffectButton active={isActive('petals')}      onClick={() => toggle('petals')}      icon={<span>🌸</span>}>Rose Petals</EffectButton>
-          <EffectButton active={isActive('confetti')}    onClick={() => toggle('confetti')}    icon={<Sparkles className="w-4 h-4" />}>Confetti</EffectButton>
-          <EffectButton active={isActive('sparkle')}     onClick={() => toggle('sparkle')}     icon={<span>✦</span>}>Sparkle</EffectButton>
+          <EffectButton active={isActive('hearts')}       onClick={() => toggle('hearts')}       icon={<Heart className="w-4 h-4" />}>Floating Hearts</EffectButton>
+          <EffectButton active={isActive('starfall')}     onClick={() => toggle('starfall')}     icon={<Star className="w-4 h-4" />}>Starfall</EffectButton>
+          <EffectButton active={isActive('aurora')}       onClick={() => toggle('aurora')}       icon={<Wind className="w-4 h-4" />}>Aurora</EffectButton>
+          <EffectButton active={isActive('butterflies')}  onClick={() => toggle('butterflies')}  icon={<span>🦋</span>}>Butterflies</EffectButton>
+          <EffectButton active={isActive('petals')}       onClick={() => toggle('petals')}       icon={<span>🌸</span>}>Rose Petals</EffectButton>
+          <EffectButton active={isActive('confetti')}     onClick={() => toggle('confetti')}     icon={<Sparkles className="w-4 h-4" />}>Confetti</EffectButton>
+          <EffectButton active={isActive('sparkle')}      onClick={() => toggle('sparkle')}      icon={<span>✦</span>}>Sparkle</EffectButton>
+          <EffectButton active={isActive('kaleidoscope')} onClick={() => toggle('kaleidoscope')} icon={<span>🔮</span>}>Kaleidoscope</EffectButton>
+        </div>
+      </div>
+      <div className="space-y-2.5">
+        <h4 className="text-xs uppercase tracking-widest text-primary font-semibold">Motion-Reactive</h4>
+        <p className="text-[10px] text-white/35">These effects respond to your movement</p>
+        <div className="grid grid-cols-2 gap-2">
+          <EffectButton active={isActive('motion_bloom')}  onClick={() => toggle('motion_bloom')}  icon={<span>🌟</span>}>Motion Bloom</EffectButton>
+          <EffectButton active={isActive('light_trails')}  onClick={() => toggle('light_trails')}  icon={<span>💫</span>}>Light Trails</EffectButton>
         </div>
       </div>
       <div className="space-y-2.5">
         <h4 className="text-xs uppercase tracking-widest text-primary font-semibold">Atmosphere</h4>
         <div className="grid grid-cols-2 gap-2">
-          <EffectButton active={isActive('blindfold')} onClick={() => toggle('blindfold')} icon={<Eye className="w-4 h-4" />}>Silk Blindfold</EffectButton>
-          <EffectButton active={isActive('wax')}       onClick={() => toggle('wax')}       icon={<Droplet className="w-4 h-4" />}>Wax Drip</EffectButton>
-          <EffectButton active={isActive('ice')}       onClick={() => toggle('ice')}       icon={<Snowflake className="w-4 h-4" />}>Ice Crystal</EffectButton>
-          <EffectButton active={isActive('vignette')}  onClick={() => toggle('vignette')}  icon={<Target className="w-4 h-4" />}>Vignette</EffectButton>
+          <EffectButton active={isActive('blindfold')}  onClick={() => toggle('blindfold')}  icon={<Eye className="w-4 h-4" />}>Silk Blindfold</EffectButton>
+          <EffectButton active={isActive('wax')}        onClick={() => toggle('wax')}        icon={<Droplet className="w-4 h-4" />}>Wax Drip</EffectButton>
+          <EffectButton active={isActive('ice')}        onClick={() => toggle('ice')}        icon={<Snowflake className="w-4 h-4" />}>Ice Crystal</EffectButton>
+          <EffectButton active={isActive('vignette')}   onClick={() => toggle('vignette')}   icon={<Target className="w-4 h-4" />}>Vignette</EffectButton>
+          <EffectButton active={isActive('film_grain')} onClick={() => toggle('film_grain')} icon={<span>🎞</span>}>Film Grain</EffectButton>
         </div>
       </div>
+    </div>
+  );
+}
+
+function GestureSection() {
+  const { gestureMode, setGestureMode, gestureSensitivity, setGestureSensitivity, mode } = useRoomStore();
+  const modeConfig = getModeConfig(mode);
+
+  const gestures = [
+    { type: 'wave',          emoji: '👋', label: 'Wave',         desc: `Send ${modeConfig.gestureEmoji} reaction to partner` },
+    { type: 'bigmove',       emoji: '💥', label: 'Big Move',     desc: 'Trigger confetti burst for 4 seconds' },
+    { type: 'circle',        emoji: '🔄', label: 'Draw Circle',  desc: 'Toggle sparkle effect for 3 seconds' },
+    { type: 'double_burst',  emoji: '⚡', label: 'Double Burst', desc: 'Send 🔥 reaction to partner' },
+    { type: 'stillness_break', emoji: '✨', label: 'Appear',     desc: 'Greeting sparkle when you move after stillness' },
+  ];
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Toggle */}
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-white">Live Detection</p>
+          <p className="text-[10px] text-white/40 mt-0.5">Analyse camera for gestures</p>
+        </div>
+        <button
+          onClick={() => setGestureMode(!gestureMode)}
+          className={`relative w-12 h-6 rounded-full transition-all ${gestureMode ? 'bg-primary' : 'bg-white/15'}`}
+        >
+          <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${gestureMode ? 'left-7' : 'left-1'}`} />
+        </button>
+      </div>
+
+      {gestureMode && (
+        <>
+          {/* Sensitivity */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs text-white/60">
+              <span>Sensitivity</span>
+              <span>{gestureSensitivity}%</span>
+            </div>
+            <Slider value={[gestureSensitivity]} onValueChange={([v]) => setGestureSensitivity(v)}
+              min={10} max={90} step={5} className="w-full" />
+            <div className="flex justify-between text-[9px] text-white/25">
+              <span>Less sensitive</span><span>More sensitive</span>
+            </div>
+          </div>
+
+          {/* Gesture list */}
+          <div className="space-y-2.5">
+            <h4 className="text-xs uppercase tracking-widest text-primary font-semibold">
+              Gestures in {modeConfig.name} Mode
+            </h4>
+            <div className="space-y-2">
+              {gestures.map(g => (
+                <div key={g.type} className="flex items-start gap-3 p-2.5 rounded-xl bg-black/30 border border-white/5">
+                  <span className="text-2xl flex-shrink-0">{g.emoji}</span>
+                  <div>
+                    <p className="text-xs font-semibold text-white">{g.label}</p>
+                    <p className="text-[10px] text-white/40 mt-0.5 leading-tight">{g.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Tips */}
+          <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 space-y-1.5">
+            <p className="text-[10px] font-semibold text-primary uppercase tracking-wide">Tips</p>
+            <p className="text-[10px] text-white/50 leading-relaxed">
+              • Wave your hand left–right in front of the camera<br/>
+              • Make a big motion to fill the frame for Big Move<br/>
+              • Slowly trace a circle shape for the circle gesture<br/>
+              • The green dot 🟢 at top-left shows detection is on
+            </p>
+          </div>
+        </>
+      )}
+
+      {!gestureMode && (
+        <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center">
+          <Activity className="w-8 h-8 mx-auto mb-2 text-white/20" />
+          <p className="text-xs text-white/30">Enable live detection to use camera-based gestures</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -178,7 +274,6 @@ const DRAW_TOOLS: { id: DrawTool; label: string; icon: React.ReactNode }[] = [
 ];
 
 const STAMP_EMOJIS = ['❤️','💕','🌙','✨','🔥','🎉','🦋','🌸','💋','⭐','🌈','🎨'];
-
 const COLORS = [
   '#e11d48','#ec4899','#f59e0b','#22c55e',
   '#3b82f6','#8b5cf6','#ffffff','#000000',
@@ -346,7 +441,7 @@ function AudioSection({ onAchievement }: { onAchievement?: (a: { title: string; 
 }
 
 function EffectButton({
-  active, onClick, children, icon, className = "",
+  active, onClick, children, icon, className = '',
 }: {
   active: boolean; onClick: () => void; children: React.ReactNode;
   icon?: React.ReactNode; className?: string;

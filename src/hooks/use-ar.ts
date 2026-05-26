@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { loadMediaPipe, getFaceLandmarker, getGestureRecognizer } from '@/lib/mediapipe-loader';
+import { loadMediaPipe, getFaceLandmarker, getGestureRecognizer, getActiveDelegate } from '@/lib/mediapipe-loader';
 import { detectGesture, type GestureName } from '@/hooks/use-gestures';
 
 export interface FaceLandmark { x: number; y: number; z: number }
@@ -68,17 +68,33 @@ const R_BROW      = 300;
 const NOSE_BRIDGE = 6;
 const CHIN        = 152;
 
-const SMOOTH = 0.3; // EMA smoothing factor (lower = smoother/laggier)
-
-function smoothLandmarks(
+/**
+ * Adaptive EMA smoothing: faster when movement is large, slower when still.
+ * This gives responsive tracking without jitter on fast moves.
+ */
+function adaptiveSmoothLandmarks(
   prev: FaceLandmark[] | null,
   curr: FaceLandmark[],
 ): FaceLandmark[] {
   if (!prev || prev.length !== curr.length) return curr;
+
+  // Measure average movement across all points
+  let totalDelta = 0;
+  for (let i = 0; i < curr.length; i++) {
+    const dx = curr[i].x - prev[i].x;
+    const dy = curr[i].y - prev[i].y;
+    totalDelta += Math.sqrt(dx * dx + dy * dy);
+  }
+  const avgDelta = totalDelta / curr.length;
+
+  // Adaptive alpha: more weight to current frame when moving fast
+  // Range: 0.15 (very still) → 0.55 (fast movement)
+  const alpha = Math.min(0.55, 0.15 + avgDelta * 80);
+
   return curr.map((lm, i) => ({
-    x: prev[i].x + SMOOTH * (lm.x - prev[i].x),
-    y: prev[i].y + SMOOTH * (lm.y - prev[i].y),
-    z: prev[i].z + SMOOTH * (lm.z - prev[i].z),
+    x: prev[i].x + alpha * (lm.x - prev[i].x),
+    y: prev[i].y + alpha * (lm.y - prev[i].y),
+    z: prev[i].z + alpha * (lm.z - prev[i].z),
   }));
 }
 
@@ -91,13 +107,13 @@ function computeHeadPose(lm: FaceLandmark[]): HeadPose {
 
   const tiltAngle = Math.atan2(re.y - le.y, re.x - le.x) * (180 / Math.PI);
 
-  const eyeMidY  = (le.y + re.y) / 2;
-  const faceH    = Math.abs(chin.y - eyeMidY);
+  const eyeMidY = (le.y + re.y) / 2;
+  const faceH   = Math.abs(chin.y - eyeMidY);
   const nodAngle = faceH > 0 ? ((nose.y - eyeMidY) / faceH - 0.35) * 60 : 0;
 
-  const eyeW           = Math.abs(re.x - le.x);
-  const noseOffCenter  = (nose.x - (le.x + re.x) / 2) / (eyeW + 0.001);
-  const yawAngle       = noseOffCenter * 80;
+  const eyeW          = Math.abs(re.x - le.x);
+  const noseOffCenter = (nose.x - (le.x + re.x) / 2) / (eyeW + 0.001);
+  const yawAngle      = noseOffCenter * 80;
 
   return { tiltAngle, nodAngle, yawAngle };
 }
@@ -108,26 +124,26 @@ function computeFaceExpression(lm: FaceLandmark[]): FaceExpression {
   const mouthW = lm[MOUTH_LEFT] && lm[MOUTH_RIGHT]
     ? Math.abs(lm[MOUTH_RIGHT].x - lm[MOUTH_LEFT].x) : 0.1;
   const mouthOpenRatio = Math.min(1, mouthH / (mouthW * 0.6));
-  const mouthOpen = mouthOpenRatio > 0.35;
+  const mouthOpen = mouthOpenRatio > 0.3; // lowered from 0.35 for better detection
 
   const leftEyeH  = lm[L_EYE_TOP] && lm[L_EYE_BOT]
     ? Math.abs(lm[L_EYE_BOT].y - lm[L_EYE_TOP].y) : 0.03;
   const rightEyeH = lm[R_EYE_TOP] && lm[R_EYE_BOT]
     ? Math.abs(lm[R_EYE_BOT].y - lm[R_EYE_TOP].y) : 0.03;
-  const eyeBlinkLeft  = leftEyeH  < 0.014;
-  const eyeBlinkRight = rightEyeH < 0.014;
+  const eyeBlinkLeft  = leftEyeH  < 0.016; // slightly relaxed from 0.014
+  const eyeBlinkRight = rightEyeH < 0.016;
 
   let smiling = false;
   if (lm[MOUTH_LEFT] && lm[MOUTH_RIGHT] && lm[LOWER_LIP]) {
     const cornerY = (lm[MOUTH_LEFT].y + lm[MOUTH_RIGHT].y) / 2;
-    smiling = cornerY < lm[LOWER_LIP].y - 0.008;
+    smiling = cornerY < lm[LOWER_LIP].y - 0.006; // more sensitive smile
   }
 
   let eyeBrowsRaised = false;
   if (lm[L_BROW] && lm[R_BROW] && lm[L_EYE_TOP] && lm[R_EYE_TOP]) {
     const leftBrowDist  = lm[L_EYE_TOP].y - lm[L_BROW].y;
     const rightBrowDist = lm[R_EYE_TOP].y - lm[R_BROW].y;
-    eyeBrowsRaised = (leftBrowDist + rightBrowDist) / 2 > 0.04;
+    eyeBrowsRaised = (leftBrowDist + rightBrowDist) / 2 > 0.035; // more sensitive
   }
 
   let eyeGazeLeft = false, eyeGazeRight = false;
@@ -137,8 +153,8 @@ function computeFaceExpression(lm: FaceLandmark[]): FaceExpression {
       (lm[L_EYE_OUT].x + lm[L_EYE_IN].x) / 2 +
       (lm[R_EYE_OUT].x + lm[R_EYE_IN].x) / 2
     ) / 2;
-    if (irisAvgX - eyeAvgX >  0.022) eyeGazeRight = true;
-    if (eyeAvgX  - irisAvgX > 0.022) eyeGazeLeft  = true;
+    if (irisAvgX - eyeAvgX >  0.018) eyeGazeRight = true; // more sensitive gaze
+    if (eyeAvgX  - irisAvgX > 0.018) eyeGazeLeft  = true;
   }
 
   return {
@@ -165,6 +181,10 @@ const MP_GESTURE_MAP: Record<string, GestureName> = {
   ILoveYou:    'rock_on',
 };
 
+// Detection rate: GPU runs faster so we can push to ~20fps; CPU stays at 12fps
+const GPU_INTERVAL_MS = 50;  // ~20fps
+const CPU_INTERVAL_MS = 83;  // ~12fps
+
 export function useAR({
   videoRef,
   enabled,
@@ -177,7 +197,7 @@ export function useAR({
 }: UseAROptions): ARState {
   const [state, setState] = useState<ARState>(INIT_STATE);
 
-  // ── Store all callbacks in refs so detection loop never restarts due to them ──
+  // Store all callbacks in refs so detection loop never restarts due to them
   const cbGesture    = useRef(onGesture);
   const cbHeadTilt   = useRef(onHeadTilt);
   const cbMouthOpen  = useRef(onMouthOpen);
@@ -192,7 +212,7 @@ export function useAR({
   cbSmile.current     = onSmile;
   cbBrowRaise.current = onEyeBrowRaise;
 
-  // ── Detection state refs (never trigger re-renders) ──
+  // Detection state refs (never trigger re-renders)
   const gestureHoldRef   = useRef<{ name: GestureName; since: number } | null>(null);
   const lastTriggeredRef = useRef<GestureName>('none');
   const lastMouthOpenRef = useRef(0);
@@ -205,7 +225,7 @@ export function useAR({
   const lastVideoTimeRef = useRef(-1);
   const intervalRef      = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ── Single effect — only re-runs when `enabled` changes ──
+  // Single effect — only re-runs when `enabled` changes
   useEffect(() => {
     if (!enabled) {
       if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
@@ -218,9 +238,10 @@ export function useAR({
     setState(s => ({ ...s, isLoading: true, error: null, loadingProgress: 5 }));
 
     const timers = [
-      setTimeout(() => active && setState(s => ({ ...s, loadingProgress: 25 })), 700),
-      setTimeout(() => active && setState(s => ({ ...s, loadingProgress: 55 })), 2200),
-      setTimeout(() => active && setState(s => ({ ...s, loadingProgress: 80 })), 4500),
+      setTimeout(() => active && setState(s => ({ ...s, loadingProgress: 20 })), 500),
+      setTimeout(() => active && setState(s => ({ ...s, loadingProgress: 45 })), 2000),
+      setTimeout(() => active && setState(s => ({ ...s, loadingProgress: 70 })), 4000),
+      setTimeout(() => active && setState(s => ({ ...s, loadingProgress: 88 })), 6000),
     ];
 
     loadMediaPipe()
@@ -229,7 +250,10 @@ export function useAR({
         if (!active) return;
         setState(s => ({ ...s, isLoading: false, isReady: true, loadingProgress: 100 }));
 
-        // ── Detection loop at 15 fps for smooth AR without overloading MediaPipe ──
+        // Pick detection rate based on which delegate loaded
+        const delegate = getActiveDelegate();
+        const intervalMs = delegate === 'GPU' ? GPU_INTERVAL_MS : CPU_INTERVAL_MS;
+
         intervalRef.current = setInterval(() => {
           if (!active) return;
 
@@ -249,7 +273,7 @@ export function useAR({
 
             const rawFaceLm: FaceLandmark[] | null = faceRes?.faceLandmarks?.[0] ?? null;
             const smoothedFace = rawFaceLm
-              ? smoothLandmarks(prevFaceLmRef.current, rawFaceLm)
+              ? adaptiveSmoothLandmarks(prevFaceLmRef.current, rawFaceLm)
               : null;
             prevFaceLmRef.current = smoothedFace;
 
@@ -259,7 +283,7 @@ export function useAR({
               (g: any[]) => g?.[0]?.categoryName ?? 'None',
             );
 
-            const headPose      = smoothedFace ? computeHeadPose(smoothedFace)       : null;
+            const headPose       = smoothedFace ? computeHeadPose(smoothedFace)       : null;
             const faceExpression = smoothedFace ? computeFaceExpression(smoothedFace) : null;
 
             setState(s => ({
@@ -271,20 +295,18 @@ export function useAR({
               faceExpression,
             }));
 
-            // ── Gesture processing ──
             if (handLms?.length) {
               processGestureInline(handLms[0], mpGestures[0] ?? 'None');
             } else {
               gestureHoldRef.current = null;
             }
 
-            // ── Face event processing ──
             if (headPose && faceExpression) {
               processFaceEventsInline(faceExpression, headPose);
             }
 
           } catch { /* skip bad frame */ }
-        }, 67); // ~15 fps
+        }, intervalMs);
       })
       .catch(err => {
         timers.forEach(clearTimeout);
@@ -303,9 +325,9 @@ export function useAR({
       timers.forEach(clearTimeout);
       if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     };
-  }, [enabled]); // Only re-run when enabled changes — NOT when callbacks change
+  }, [enabled]);
 
-  // ── Inline helpers that use refs (no deps, stable across renders) ──
+  // Gesture processing — uses refs to avoid recreating interval
   function processGestureInline(landmarks: HandLandmark[], mpGestureName: string) {
     if (!cbGesture.current) return;
 
@@ -315,7 +337,7 @@ export function useAR({
     }
     if (gestureName === 'none') {
       const r = detectGesture(landmarks);
-      if (r.confidence > 0.72) gestureName = r.name;
+      if (r.confidence > 0.70) gestureName = r.name; // slightly more sensitive (was 0.72)
     }
     if (gestureName === 'none') { gestureHoldRef.current = null; return; }
 
@@ -324,49 +346,50 @@ export function useAR({
       gestureHoldRef.current = { name: gestureName, since: now };
       return;
     }
+    // Reduced hold time: 400ms (was 550ms) for faster gesture response
     if (
-      now - gestureHoldRef.current.since > 550 &&
+      now - gestureHoldRef.current.since > 400 &&
       lastTriggeredRef.current !== gestureName
     ) {
       lastTriggeredRef.current = gestureName;
       cbGesture.current(gestureName);
-      setTimeout(() => { lastTriggeredRef.current = 'none'; }, 1600);
+      setTimeout(() => { lastTriggeredRef.current = 'none'; }, 1400);
     }
   }
 
   function processFaceEventsInline(expr: FaceExpression, pose: HeadPose) {
     const now = Date.now();
-    if (expr.mouthOpen && now - lastMouthOpenRef.current > 3000) {
+    if (expr.mouthOpen && now - lastMouthOpenRef.current > 2500) {
       lastMouthOpenRef.current = now;
       cbMouthOpen.current?.();
     }
-    if ((expr.eyeBlinkLeft || expr.eyeBlinkRight) && now - lastBlinkRef.current > 1500) {
+    if ((expr.eyeBlinkLeft || expr.eyeBlinkRight) && now - lastBlinkRef.current > 1200) {
       lastBlinkRef.current = now;
       cbBlink.current?.(
         expr.eyeBlinkLeft && expr.eyeBlinkRight ? 'both'
           : expr.eyeBlinkLeft ? 'left' : 'right',
       );
     }
-    if (expr.smiling && now - lastSmileRef.current > 4000) {
+    if (expr.smiling && now - lastSmileRef.current > 3500) {
       lastSmileRef.current = now;
       cbSmile.current?.();
     }
-    if (expr.eyeBrowsRaised && now - lastBrowRef.current > 3000) {
+    if (expr.eyeBrowsRaised && now - lastBrowRef.current > 2500) {
       lastBrowRef.current = now;
       cbBrowRaise.current?.();
     }
     if (
-      Math.abs(pose.tiltAngle) > 16 &&
-      now - lastTiltRef.current > 2500 &&
+      Math.abs(pose.tiltAngle) > 14 && // slightly more sensitive (was 16)
+      now - lastTiltRef.current > 2000 &&
       (
         Math.sign(pose.tiltAngle) !== Math.sign(prevTiltRef.current) ||
-        Math.abs(pose.tiltAngle - prevTiltRef.current) > 10
+        Math.abs(pose.tiltAngle - prevTiltRef.current) > 8
       )
     ) {
       lastTiltRef.current = now;
       prevTiltRef.current = pose.tiltAngle;
       cbHeadTilt.current?.(pose.tiltAngle);
-    } else if (Math.abs(pose.tiltAngle) <= 16) {
+    } else if (Math.abs(pose.tiltAngle) <= 14) {
       prevTiltRef.current = pose.tiltAngle;
     }
   }

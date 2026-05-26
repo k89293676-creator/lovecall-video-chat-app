@@ -47,13 +47,12 @@ export function GestureIndicator({ gesture }: Props) {
   const [animKey, setAnimKey] = useState(0);
 
   useEffect(() => {
-    if (gesture !== 'none') {
-      setDisplayed(gesture);
-      setVisible(true);
-      setAnimKey(k => k + 1);
-      const t = setTimeout(() => setVisible(false), 2200);
-      return () => clearTimeout(t);
-    }
+    if (gesture === 'none') return;
+    setDisplayed(gesture);
+    setVisible(true);
+    setAnimKey(k => k + 1);
+    const t = setTimeout(() => setVisible(false), 2200);
+    return () => clearTimeout(t);
   }, [gesture]);
 
   if (!visible || displayed === 'none') return null;

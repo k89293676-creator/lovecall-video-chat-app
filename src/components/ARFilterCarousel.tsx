@@ -108,9 +108,10 @@ const VIBES: ARVibe[] = [
 interface Props {
   visible: boolean;
   onClose: () => void;
+  sendMessage?: (data: unknown) => void;
 }
 
-export function ARFilterCarousel({ visible, onClose }: Props) {
+export function ARFilterCarousel({ visible, onClose, sendMessage }: Props) {
   const [activeVibe, setActiveVibe] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
@@ -134,6 +135,8 @@ export function ARFilterCarousel({ visible, onClose }: Props) {
     state.setEffects([...kept, ...vibe.accessories]);
     state.setVideoFilter(vibe.filter);
     setActiveVibe(vibe.id);
+    // Sync vibe with partner
+    sendMessage?.({ type: 'ar_vibe', accessories: vibe.accessories, filter: vibe.filter });
   }, []);
 
   const onMouseDown = (e: React.MouseEvent) => {

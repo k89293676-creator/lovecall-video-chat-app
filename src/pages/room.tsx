@@ -126,7 +126,7 @@ export default function Room() {
   // Pass localVideoRef directly — useAR reads .current inside its effect,
   // so it always has the live element even if it mounts after first render.
   const arState = useAR({
-    videoRef: localVideoRef,
+    videoRef: localVideoRef as React.RefObject<HTMLVideoElement>,
     enabled: mediaReady && store.gestureMode,
     onGesture: handleARGesture,
     onSmile: handleFaceSmile,
@@ -180,7 +180,8 @@ export default function Room() {
   const handleDisconnect = () => { store.disconnect(); setMediaReady(false); setLocation('/'); };
 
   const copyRoomId = () => {
-    navigator.clipboard.writeText(id||'');
+    const shareUrl = `${window.location.origin}/room/${id}`;
+    navigator.clipboard.writeText(shareUrl);
     setCopied(true); setTimeout(()=>setCopied(false), 2000);
   };
 
@@ -249,7 +250,7 @@ export default function Room() {
         )}
       </div>
 
-      <CanvasOverlay />
+      <CanvasOverlay sendMessage={sendMessage} />
 
       {/* Face / hand AR overlay — videoRef used to map landmark coords to PIP position */}
       <ARFaceOverlay
@@ -257,7 +258,7 @@ export default function Room() {
         handLandmarks={arState.handLandmarks}
         headPose={arState.headPose}
         faceExpression={arState.faceExpression}
-        videoRef={localVideoRef}
+        videoRef={localVideoRef as React.RefObject<HTMLVideoElement>}
       />
 
       <GestureIndicator gesture={lastARGesture} />
@@ -266,8 +267,8 @@ export default function Room() {
         error={arState.error} loadingProgress={arState.loadingProgress}
         faceLandmarks={arState.faceLandmarks} handLandmarks={arState.handLandmarks}
       />
-      <GestureLayer videoRef={localVideoRef} onGestureReaction={handleGestureReaction} sendMessage={sendMessage} />
-      <ARFilterCarousel visible={showVibes} onClose={()=>setShowVibes(false)} />
+      <GestureLayer videoRef={localVideoRef as React.RefObject<HTMLVideoElement>} onGestureReaction={handleGestureReaction} sendMessage={sendMessage} />
+      <ARFilterCarousel visible={showVibes} onClose={()=>setShowVibes(false)} sendMessage={sendMessage} />
       <RippleCanvas onAchievement={handleAchievement} sendMessage={sendMessage} />
       <PrivacyMode />
       <Toolbox onAchievement={handleAchievement} sendMessage={sendMessage} />

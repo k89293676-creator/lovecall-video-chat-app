@@ -130,6 +130,27 @@ export function usePeer(roomId?: string | null) {
       if (msg.type === 'mode' && typeof msg.mode === 'string') {
         useRoomStore.getState().setMode(msg.mode as any);
       }
+
+      // Drawing sync — forward to CanvasOverlay via custom event
+      if (msg.type === 'draw_stroke' || msg.type === 'draw_action') {
+        window.dispatchEvent(new CustomEvent('peer-draw', { detail: msg }));
+      }
+
+      // AR vibe sync
+      if (msg.type === 'ar_vibe') {
+        const { accessories, filter } = msg as { accessories: string[]; filter: string };
+        const state = useRoomStore.getState();
+        const ALL_AR = [
+          'ar_crown','ar_halo','ar_cat_ears','ar_bunny_ears','ar_horns',
+          'ar_rose','ar_glasses','ar_glasses_cool','ar_glasses_heart',
+          'ar_gaze','ar_clown_nose','ar_mustache','ar_curly_mustache',
+          'ar_beard','ar_glitter','ar_mesh','ar_head_indicator',
+          'ar_lip_pink','ar_lip_red','ar_eye_blue','ar_eye_purple',
+        ];
+        const kept = state.activeEffects.filter((e: string) => !ALL_AR.includes(e));
+        state.setEffects([...kept, ...accessories]);
+        if (filter) state.setVideoFilter(filter as any);
+      }
     });
 
     conn.on('close', () => {

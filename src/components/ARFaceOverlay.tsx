@@ -385,6 +385,56 @@ function drawHeadTiltIndicator(ctx: CanvasRenderingContext2D, pose: HeadPose, ca
   ctx.restore();
 }
 
+function drawLipColor(ctx: CanvasRenderingContext2D, f: FaceLandmark[], rect: DOMRect, color: string) {
+  const uLip=lp(f,U_LIP,rect), lLip=lp(f,L_LIP,rect);
+  const lMouth=lp(f,L_MOUTH,rect), rMouth=lp(f,R_MOUTH,rect);
+  if (!uLip||!lLip||!lMouth||!rMouth) return;
+  const cx=(lMouth.x+rMouth.x)/2, cy=(uLip.y+lLip.y)/2;
+  const w=Math.abs(rMouth.x-lMouth.x), h=Math.abs(lLip.y-uLip.y)*1.2;
+  ctx.save();
+  ctx.globalAlpha=0.55; ctx.fillStyle=color;
+  ctx.shadowColor=color; ctx.shadowBlur=6;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, w*0.5, Math.max(h*0.5, 4), 0, 0, Math.PI*2);
+  ctx.fill();
+  // Upper lip highlight
+  ctx.globalAlpha=0.3; ctx.fillStyle='rgba(255,255,255,0.7)';
+  ctx.shadowBlur=0;
+  ctx.beginPath();
+  ctx.ellipse(cx, uLip.y+2, w*0.22, Math.max(h*0.15,2), 0, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawEyeShadow(ctx: CanvasRenderingContext2D, f: FaceLandmark[], rect: DOMRect, color: string) {
+  const le=lp(f,L_EYE_CEN,rect), re=lp(f,R_EYE_CEN,rect);
+  if (!le||!re) return;
+  const edPx=eyeDistPx(f,rect);
+  ctx.save();
+  ctx.globalAlpha=0.45;
+  for (const eye of [le, re]) {
+    const g=ctx.createRadialGradient(eye.x, eye.y-4, 0, eye.x, eye.y-4, edPx*0.28);
+    g.addColorStop(0, color); g.addColorStop(1,'transparent');
+    ctx.fillStyle=g;
+    ctx.beginPath();
+    ctx.ellipse(eye.x, eye.y-edPx*0.06, edPx*0.26, edPx*0.14, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+  // Shimmer dots
+  ctx.globalAlpha=0.7;
+  for (const eye of [le, re]) {
+    for (let i=0;i<4;i++) {
+      const a=(i/4)*Math.PI-Math.PI*0.7;
+      const r=edPx*0.2;
+      ctx.fillStyle='rgba(255,255,255,0.5)';
+      ctx.beginPath();
+      ctx.arc(eye.x+Math.cos(a)*r, eye.y+Math.sin(a)*r-edPx*0.05, 1.5, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
 function drawEyeGaze(ctx: CanvasRenderingContext2D, expr: FaceExpression, f: FaceLandmark[], rect: DOMRect) {
   if (!expr.eyeGazeLeft&&!expr.eyeGazeRight) return;
   const le=lp(f,L_EYE_CEN,rect), re=lp(f,R_EYE_CEN,rect);
@@ -533,6 +583,10 @@ export function ARFaceOverlay({ faceLandmarks, handLandmarks, headPose, faceExpr
         if (fx('ar_curly_mustache'))   drawMustache(ctx,f,rect,'curly');
         if (fx('ar_beard'))            drawBeard(ctx,f,rect);
         if (fx('ar_rose'))             drawRose(ctx,f,rect);
+        if (fx('ar_lip_pink'))         drawLipColor(ctx,f,rect,'#ff6b9d');
+        if (fx('ar_lip_red'))          drawLipColor(ctx,f,rect,'#cc1133');
+        if (fx('ar_eye_blue'))         drawEyeShadow(ctx,f,rect,'rgba(80,130,255,0.85)');
+        if (fx('ar_eye_purple'))       drawEyeShadow(ctx,f,rect,'rgba(160,60,220,0.85)');
         if (expr)                      drawMouthEffect(ctx,f,rect,expr);
         if (expr&&fx('ar_gaze'))       drawEyeGaze(ctx,expr,f,rect);
       }

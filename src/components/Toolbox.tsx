@@ -140,6 +140,16 @@ function ARSection({ onAchievement }: { onAchievement?: (a: { title: string; emo
         </div>
       </div>
       <div className="space-y-2.5">
+        <h4 className="text-xs uppercase tracking-widest text-primary font-semibold">Face AR — Makeup</h4>
+        <p className="text-[10px] text-white/35">Anchored to lips and eyes</p>
+        <div className="grid grid-cols-2 gap-2">
+          <EffectButton active={activeEffects.includes('ar_lip_pink')}   onClick={() => { toggleEffect('ar_lip_pink');   const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>💋</span>}>Lip Pink</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_lip_red')}    onClick={() => { toggleEffect('ar_lip_red');    const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>❤️</span>}>Lip Red</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_eye_blue')}   onClick={() => { toggleEffect('ar_eye_blue');   const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>💙</span>}>Eye Shadow Blue</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_eye_purple')} onClick={() => { toggleEffect('ar_eye_purple'); const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>💜</span>}>Eye Shadow Purple</EffectButton>
+        </div>
+      </div>
+      <div className="space-y-2.5">
         <h4 className="text-xs uppercase tracking-widest text-primary font-semibold">Face AR — Sparkle &amp; Mesh</h4>
         <div className="grid grid-cols-2 gap-2">
           <EffectButton active={activeEffects.includes('ar_glitter')}        onClick={() => { toggleEffect('ar_glitter');         const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>✨</span>}>Face Glitter</EffectButton>

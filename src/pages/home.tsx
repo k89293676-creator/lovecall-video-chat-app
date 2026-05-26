@@ -73,7 +73,7 @@ export default function Home() {
             style={{ boxShadow: `0 0 20px ${selectedMode.glowColor}` }}>
             <Heart className="w-8 h-8 fill-primary" />
           </div>
-          <h1 className="text-6xl font-serif font-bold text-white mb-2 tracking-tight">LoveCall</h1>
+          <h1 className="text-6xl font-serif font-bold text-white mb-2 tracking-tight">Moonlight</h1>
           <p className="text-white/50 font-sans text-base font-light tracking-wide">An intimate space for two.</p>
         </div>
 

@@ -7,7 +7,7 @@ export interface Achievement {
 }
 
 export const ACHIEVEMENTS: Achievement[] = [
-  { id: 'first_call', title: 'First Connection', description: 'Made your first LoveCall', emoji: '💕', condition: 'connect' },
+  { id: 'first_call', title: 'First Connection', description: 'Made your first Moonlight call', emoji: '💕', condition: 'connect' },
   { id: 'first_draw', title: 'Love Artist', description: 'Drew on screen together', emoji: '🎨', condition: 'draw' },
   { id: 'first_game', title: 'Game Night', description: 'Played your first game together', emoji: '🎮', condition: 'game' },
   { id: 'first_effect', title: 'Filter Fiend', description: 'Used your first AR effect', emoji: '✨', condition: 'effect' },
@@ -19,7 +19,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'truth_dare', title: 'Truth Seeker', description: 'Played Truth or Dare', emoji: '🃏', condition: 'truthordare' },
 ];
 
-const STORAGE_KEY = 'lovecall_achievements_v2';
+const STORAGE_KEY = 'moonlight_achievements_v2';
 
 export function getUnlockedAchievements(): string[] {
   try {

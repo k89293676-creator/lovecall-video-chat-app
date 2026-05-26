@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Loader2, AlertCircle, Cpu, Wifi, WifiOff } from 'lucide-react';
+import { Loader2, AlertCircle, Cpu, RefreshCw } from 'lucide-react';
 import { resetMediaPipe } from '@/lib/mediapipe-loader';
 
 interface Props {
@@ -15,21 +15,31 @@ export function ARStatusBadge({
   isLoading, isReady, error, loadingProgress, faceLandmarks, handLandmarks,
 }: Props) {
   const [dismissed, setDismissed] = useState(false);
+  const [retrying, setRetrying]   = useState(false);
 
   if (!isLoading && !isReady && !error) return null;
   if (dismissed && !isLoading && !isReady) return null;
 
+  const handleRetry = () => {
+    setRetrying(true);
+    resetMediaPipe();
+    setTimeout(() => { setRetrying(false); window.location.reload(); }, 300);
+  };
+
   if (error) {
     return (
       <div className="fixed top-4 right-4 z-50 flex flex-col items-end gap-1.5 animate-in fade-in slide-in-from-right-2 duration-300">
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-900/50 border border-red-500/50 backdrop-blur-md shadow-lg">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-900/60 border border-red-500/60 backdrop-blur-md shadow-lg">
           <AlertCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
           <span className="text-[10px] text-red-300 font-medium">AR Offline</span>
           <button
-            onClick={() => { resetMediaPipe(); window.location.reload(); }}
-            className="text-[10px] text-red-200/70 hover:text-white underline ml-1 transition-colors"
+            onClick={handleRetry}
+            disabled={retrying}
+            className="flex items-center gap-1 text-[10px] text-red-200/80 hover:text-white underline ml-1 transition-colors"
           >
-            Retry
+            {retrying
+              ? <><RefreshCw className="w-2.5 h-2.5 animate-spin" /> Retrying…</>
+              : 'Retry'}
           </button>
           <button
             onClick={() => setDismissed(true)}
@@ -38,8 +48,11 @@ export function ARStatusBadge({
             ✕
           </button>
         </div>
-        <p className="text-[9px] text-red-400/60 pr-1 max-w-[220px] text-right leading-tight">
-          {String(error).slice(0, 80)}
+        <p className="text-[9px] text-red-400/60 pr-1 max-w-[240px] text-right leading-tight">
+          {String(error).replace('AR could not initialize: ', '').slice(0, 100)}
+        </p>
+        <p className="text-[8px] text-red-400/40 pr-1 max-w-[240px] text-right leading-tight">
+          Tip: Check internet connection or try a different network.
         </p>
       </div>
     );
@@ -55,11 +68,11 @@ export function ARStatusBadge({
         </div>
         <div className="w-44 h-0.5 bg-white/10 rounded-full overflow-hidden">
           <div
-            className="h-full bg-gradient-to-r from-amber-400 to-rose-500 rounded-full transition-all duration-500"
+            className="h-full bg-gradient-to-r from-amber-400 to-rose-500 rounded-full transition-all duration-700"
             style={{ width: `${loadingProgress}%` }}
           />
         </div>
-        <p className="text-[9px] text-white/25 pr-1">Loading face & hand models…</p>
+        <p className="text-[9px] text-white/25 pr-1">Downloading face &amp; hand models…</p>
       </div>
     );
   }
@@ -76,7 +89,6 @@ export function ARStatusBadge({
         borderColor: hasFace ? 'rgba(52,211,153,0.3)' : 'rgba(255,255,255,0.08)',
       }}
     >
-      {/* Face dot */}
       <div className="flex items-center gap-1">
         <div
           className={`w-1.5 h-1.5 rounded-full transition-all duration-200 ${
@@ -87,10 +99,7 @@ export function ARStatusBadge({
         />
         <span className="text-[9px] text-white/40 font-medium">face</span>
       </div>
-
       <div className="w-px h-3 bg-white/10" />
-
-      {/* Hand dot */}
       <div className="flex items-center gap-1">
         <div
           className={`w-1.5 h-1.5 rounded-full transition-all duration-200 ${
@@ -101,9 +110,7 @@ export function ARStatusBadge({
         />
         <span className="text-[9px] text-white/40 font-medium">hand</span>
       </div>
-
       <div className="w-px h-3 bg-white/10" />
-
       <Cpu className="w-3 h-3 text-primary/60" />
     </div>
   );

@@ -110,6 +110,44 @@ function ARSection({ onAchievement }: { onAchievement?: (a: { title: string; emo
         </div>
       </div>
       <div className="space-y-2.5">
+        <h4 className="text-xs uppercase tracking-widest text-primary font-semibold">Face AR — Hats &amp; Ears</h4>
+        <p className="text-[10px] text-white/35">Anchored to real face landmarks</p>
+        <div className="grid grid-cols-2 gap-2">
+          <EffectButton active={activeEffects.includes('ar_crown')}     onClick={() => { toggleEffect('ar_crown');      const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>👑</span>}>Crown</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_halo')}      onClick={() => { toggleEffect('ar_halo');       const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>😇</span>}>Angel Halo</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_cat_ears')}  onClick={() => { toggleEffect('ar_cat_ears');   const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>🐱</span>}>Cat Ears</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_bunny_ears')} onClick={() => { toggleEffect('ar_bunny_ears'); const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>🐰</span>}>Bunny Ears</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_horns')}     onClick={() => { toggleEffect('ar_horns');      const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>😈</span>}>Devil Horns</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_rose')}      onClick={() => { toggleEffect('ar_rose');       const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>🌹</span>}>Rose Crown</EffectButton>
+        </div>
+      </div>
+      <div className="space-y-2.5">
+        <h4 className="text-xs uppercase tracking-widest text-primary font-semibold">Face AR — Eyes &amp; Glasses</h4>
+        <div className="grid grid-cols-2 gap-2">
+          <EffectButton active={activeEffects.includes('ar_glasses')}      onClick={() => { toggleEffect('ar_glasses');       const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>👓</span>}>Classic Glasses</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_glasses_cool')} onClick={() => { toggleEffect('ar_glasses_cool');  const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>🕶️</span>}>Cool Shades</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_glasses_heart')} onClick={() => { toggleEffect('ar_glasses_heart'); const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>🥽</span>}>Heart Glasses</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_gaze')}         onClick={() => { toggleEffect('ar_gaze');           const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>👁️</span>}>Eye Gaze Track</EffectButton>
+        </div>
+      </div>
+      <div className="space-y-2.5">
+        <h4 className="text-xs uppercase tracking-widest text-primary font-semibold">Face AR — Mouth &amp; Beard</h4>
+        <div className="grid grid-cols-2 gap-2">
+          <EffectButton active={activeEffects.includes('ar_clown_nose')}     onClick={() => { toggleEffect('ar_clown_nose');      const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>🤡</span>}>Clown Nose</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_mustache')}       onClick={() => { toggleEffect('ar_mustache');        const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>👨</span>}>Mustache</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_curly_mustache')} onClick={() => { toggleEffect('ar_curly_mustache');  const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>🎩</span>}>Curly Mustache</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_beard')}          onClick={() => { toggleEffect('ar_beard');           const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>🧔</span>}>Beard</EffectButton>
+        </div>
+      </div>
+      <div className="space-y-2.5">
+        <h4 className="text-xs uppercase tracking-widest text-primary font-semibold">Face AR — Sparkle &amp; Mesh</h4>
+        <div className="grid grid-cols-2 gap-2">
+          <EffectButton active={activeEffects.includes('ar_glitter')}        onClick={() => { toggleEffect('ar_glitter');         const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>✨</span>}>Face Glitter</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_mesh')}           onClick={() => { toggleEffect('ar_mesh');            const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>🕸️</span>}>Face Mesh</EffectButton>
+          <EffectButton active={activeEffects.includes('ar_head_indicator')} onClick={() => { toggleEffect('ar_head_indicator');  const a=checkAndUnlock('effect'); if(a&&onAchievement)onAchievement(a); }} icon={<span>🔄</span>}>Head Tilt Track</EffectButton>
+        </div>
+      </div>
+      <div className="space-y-2.5">
         <h4 className="text-xs uppercase tracking-widest text-primary font-semibold">Motion-Reactive</h4>
         <p className="text-[10px] text-white/35">These effects respond to your movement</p>
         <div className="grid grid-cols-2 gap-2">
@@ -192,6 +230,60 @@ function GestureSection() {
             </div>
           </div>
 
+          {/* MediaPipe hand gestures */}
+          <div className="space-y-2.5">
+            <h4 className="text-xs uppercase tracking-widest text-primary font-semibold">Hand Gestures (MediaPipe)</h4>
+            <p className="text-[10px] text-white/35">Hold pose 0.6 s to trigger — 15 total</p>
+            <div className="space-y-2">
+              {[
+                { emoji: '✋', label: 'Open Palm',        desc: 'Particle burst from all fingertips (5 s)' },
+                { emoji: '🤏', label: 'Pinch',            desc: 'Toggle Silk Blindfold overlay' },
+                { emoji: '✌️', label: 'Peace',            desc: 'Float hearts to your partner' },
+                { emoji: '👍', label: 'Thumbs Up',        desc: 'Send 👍 reaction to partner' },
+                { emoji: '👎', label: 'Thumbs Down',      desc: 'Toggle contrast filter' },
+                { emoji: '✊', label: 'Fist',             desc: 'Toggle privacy mode' },
+                { emoji: '👌', label: 'OK Sign',          desc: 'Toggle soft blur effect' },
+                { emoji: '🤘', label: 'Rock On',          desc: 'Star shower burst (6 s)' },
+                { emoji: '🤙', label: 'Call Me',          desc: 'Send 🤙 reaction to partner' },
+                { emoji: '🕷️', label: 'Spider-Man',      desc: 'Web particle stream (4 s)' },
+                { emoji: '🫵', label: 'L-Shape',          desc: 'Toggle head tilt tracking' },
+                { emoji: '🫶', label: 'Heart Hand',       desc: 'Giant floating heart burst' },
+                { emoji: '🤞', label: 'Crossed Fingers',  desc: 'Wish with star burst' },
+              ].map(g => (
+                <div key={g.label} className="flex items-start gap-3 p-2.5 rounded-xl bg-black/30 border border-white/5">
+                  <span className="text-2xl flex-shrink-0">{g.emoji}</span>
+                  <div>
+                    <p className="text-xs font-semibold text-white">{g.label}</p>
+                    <p className="text-[10px] text-white/40 mt-0.5 leading-tight">{g.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Face tracking events */}
+          <div className="space-y-2.5">
+            <h4 className="text-xs uppercase tracking-widest text-primary font-semibold">Face Tracking Events</h4>
+            <p className="text-[10px] text-white/35">Detected automatically via face landmarks</p>
+            <div className="space-y-2">
+              {[
+                { emoji: '😮', label: 'Mouth Open',      desc: 'Star burst effect + 😮 float' },
+                { emoji: '😊', label: 'Smile',           desc: 'Float hearts + 😊 reaction' },
+                { emoji: '😉', label: 'Double Blink',    desc: 'Toggle vignette briefly' },
+                { emoji: '🌞', label: 'Head Tilt Right', desc: 'Toggle warmth filter' },
+                { emoji: '❄️', label: 'Head Tilt Left',  desc: 'Toggle cool filter' },
+                { emoji: '🤨', label: 'Eyebrow Raise',   desc: 'Float 🤨 emoji' },
+              ].map(g => (
+                <div key={g.label} className="flex items-start gap-3 p-2.5 rounded-xl bg-black/30 border border-white/5">
+                  <span className="text-2xl flex-shrink-0">{g.emoji}</span>
+                  <div>
+                    <p className="text-xs font-semibold text-white">{g.label}</p>
+                    <p className="text-[10px] text-white/40 mt-0.5 leading-tight">{g.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Tips */}
           <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 space-y-1.5">
             <p className="text-[10px] font-semibold text-primary uppercase tracking-wide">Tips</p>
@@ -199,7 +291,8 @@ function GestureSection() {
               • Wave your hand left–right in front of the camera<br/>
               • Make a big motion to fill the frame for Big Move<br/>
               • Slowly trace a circle shape for the circle gesture<br/>
-              • The green dot 🟢 at top-left shows detection is on
+              • The green dot 🟢 at top-left shows detection is on<br/>
+              • Hand skeleton is drawn live when MediaPipe is ready
             </p>
           </div>
         </>

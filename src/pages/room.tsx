@@ -15,9 +15,14 @@ import { EmojiReactions } from '@/components/EmojiReactions';
 import { MediaPermissionGate } from '@/components/MediaPermissionGate';
 import { ChatPanel } from '@/components/ChatPanel';
 import { GestureLayer } from '@/components/GestureLayer';
+import { ARFaceOverlay, spawnHearts, spawnParticles, spawnStars } from '@/components/ARFaceOverlay';
+import { GestureIndicator } from '@/components/GestureIndicator';
+import { ARStatusBadge } from '@/components/ARStatusBadge';
 import { buildFilterStyle } from '@/components/VideoFilter';
 import { getModeConfig } from '@/lib/modes';
 import { checkAndUnlock } from '@/lib/achievements';
+import { useAR } from '@/hooks/use-ar';
+import type { GestureName } from '@/hooks/use-gestures';
 import type { AcquiredMedia } from '@/lib/media-permissions';
 
 interface FloatingReaction {
@@ -41,6 +46,147 @@ export default function Room() {
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
 
   const { sendMessage } = usePeer(mediaReady ? id : null);
+  const [lastARGesture, setLastARGesture] = useState<GestureName>('none');
+
+  const floatEmoji = useCallback((emoji: string) => {
+    const id2 = `${Date.now()}-${Math.random()}`;
+    setFloatingReactions(f => [...f, { id: id2, emoji, x: 40 + Math.random() * 20 }]);
+    setTimeout(() => setFloatingReactions(f => f.filter(r => r.id !== id2)), 3000);
+  }, []);
+
+  const toggleEffectTimed = useCallback((effectId: string, duration: number) => {
+    const s = useRoomStore.getState();
+    if (!s.activeEffects.includes(effectId)) s.toggleEffect(effectId);
+    setTimeout(() => {
+      if (useRoomStore.getState().activeEffects.includes(effectId)) {
+        useRoomStore.getState().toggleEffect(effectId);
+      }
+    }, duration);
+  }, []);
+
+  const handleARGesture = useCallback((gesture: GestureName) => {
+    setLastARGesture(gesture);
+    setTimeout(() => setLastARGesture('none'), 2000);
+    const state = useRoomStore.getState();
+    const cx = window.innerWidth * 0.15;
+    const cy = window.innerHeight * 0.5;
+
+    switch (gesture) {
+      case 'open_palm':
+        toggleEffectTimed('ar_particles', 5000);
+        break;
+      case 'pinch':
+        state.toggleEffect('filter_blindfold');
+        break;
+      case 'peace': {
+        const emoji = ['❤️', '💕', '💗'][Math.floor(Math.random() * 3)];
+        floatEmoji(emoji);
+        spawnHearts(cx, cy, 8);
+        sendMessage?.({ type: 'reaction', emoji });
+        break;
+      }
+      case 'thumbs_up':
+        floatEmoji('👍');
+        sendMessage?.({ type: 'reaction', emoji: '👍' });
+        break;
+      case 'thumbs_down':
+        state.toggleEffect('filter_contrast_boost');
+        floatEmoji('👎');
+        break;
+      case 'fist':
+        state.toggleEffect('privacy');
+        floatEmoji('✊');
+        break;
+      case 'ok_sign':
+        state.toggleEffect('filter_blur');
+        floatEmoji('👌');
+        break;
+      case 'rock_on':
+        toggleEffectTimed('ar_rock', 6000);
+        for (let i = 0; i < 3; i++) {
+          setTimeout(() => spawnStars(cx + (Math.random()-0.5)*200, cy + (Math.random()-0.5)*200, 6), i * 300);
+        }
+        floatEmoji('🤘');
+        sendMessage?.({ type: 'reaction', emoji: '🤘' });
+        break;
+      case 'call_me':
+        floatEmoji('🤙');
+        sendMessage?.({ type: 'reaction', emoji: '🤙' });
+        break;
+      case 'spider_man': {
+        toggleEffectTimed('ar_particles', 4000);
+        for (let i = 0; i < 5; i++) {
+          setTimeout(() => spawnParticles(cx + (Math.random()-0.5)*300, cy + (Math.random()-0.5)*300, 8, 0), i * 200);
+        }
+        floatEmoji('🕷️');
+        break;
+      }
+      case 'l_shape':
+        state.toggleEffect('ar_head_indicator');
+        floatEmoji('🫵');
+        break;
+      case 'heart_hand':
+        spawnHearts(cx, cy - 100, 12);
+        spawnHearts(cx + 50, cy, 8);
+        floatEmoji('🫶');
+        sendMessage?.({ type: 'reaction', emoji: '❤️' });
+        break;
+      case 'crossed_fingers':
+        floatEmoji('🤞');
+        spawnStars(cx, cy, 10);
+        sendMessage?.({ type: 'reaction', emoji: '🤞' });
+        break;
+    }
+  }, [sendMessage, floatEmoji, toggleEffectTimed]);
+
+  const handleFaceSmile = useCallback(() => {
+    spawnHearts(window.innerWidth * 0.15, window.innerHeight * 0.45, 5);
+    floatEmoji('😊');
+  }, [floatEmoji]);
+
+  const handleMouthOpen = useCallback(() => {
+    spawnStars(window.innerWidth * 0.15, window.innerHeight * 0.5, 6);
+    floatEmoji('😮');
+  }, [floatEmoji]);
+
+  const handleBlink = useCallback((side: 'left' | 'right' | 'both') => {
+    if (side === 'both') {
+      const s = useRoomStore.getState();
+      s.toggleEffect('filter_vignette');
+      setTimeout(() => {
+        if (useRoomStore.getState().activeEffects.includes('filter_vignette')) {
+          useRoomStore.getState().toggleEffect('filter_vignette');
+        }
+      }, 2000);
+    }
+    floatEmoji(side === 'both' ? '😉' : '👁️');
+  }, [floatEmoji]);
+
+  const handleEyeBrowRaise = useCallback(() => {
+    floatEmoji('🤨');
+  }, [floatEmoji]);
+
+  const handleHeadTilt = useCallback((angle: number) => {
+    const s = useRoomStore.getState();
+    if (angle > 18) {
+      s.toggleEffect('filter_warmth');
+      floatEmoji('🌞');
+    } else if (angle < -18) {
+      s.toggleEffect('filter_cool');
+      floatEmoji('❄️');
+    }
+  }, [floatEmoji]);
+
+  const arState = useAR({
+    videoElement: mediaReady ? localVideoRef.current : null,
+    enabled: mediaReady && store.gestureMode,
+    onGesture: handleARGesture,
+    onSmile: handleFaceSmile,
+    onMouthOpen: handleMouthOpen,
+    onBlink: handleBlink,
+    onEyeBrowRaise: handleEyeBrowRaise,
+    onHeadTilt: handleHeadTilt,
+  });
 
   const modeConfig = getModeConfig(store.mode);
   const filterStyle = buildFilterStyle(store.videoFilter, store.brightness, store.warmth, store.contrast);
@@ -198,6 +344,27 @@ export default function Room() {
 
       {/* AR + Drawing overlay */}
       <CanvasOverlay />
+
+      {/* Real face/hand AR overlay (MediaPipe landmarks) */}
+      <ARFaceOverlay
+        faceLandmarks={arState.faceLandmarks}
+        handLandmarks={arState.handLandmarks}
+        headPose={arState.headPose}
+        faceExpression={arState.faceExpression}
+      />
+
+      {/* MediaPipe gesture indicator */}
+      <GestureIndicator gesture={lastARGesture} />
+
+      {/* AR loading / tracking status badge */}
+      <ARStatusBadge
+        isLoading={arState.isLoading}
+        isReady={arState.isReady}
+        error={arState.error}
+        loadingProgress={arState.loadingProgress}
+        faceLandmarks={arState.faceLandmarks}
+        handLandmarks={arState.handLandmarks}
+      />
 
       {/* Gesture layer — reads local video, fires gesture events */}
       <GestureLayer

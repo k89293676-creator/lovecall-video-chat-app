@@ -26,6 +26,7 @@ export function CanvasOverlay({ sendMessage }: CanvasOverlayProps) {
   const partnerCanvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawingRef = useRef(false);
   const lastPosRef = useRef<{ x: number; y: number } | null>(null);
+  const prevPosRef = useRef<{ x: number; y: number } | null>(null); // for Bezier midpoint smoothing
   const historyRef = useRef<ImageData[]>([]);
   const historyIndexRef = useRef(-1);
   const particlesRef = useRef<Record<string, Particle[]>>({});
@@ -151,10 +152,19 @@ export function CanvasOverlay({ sendMessage }: CanvasOverlayProps) {
       ctx.globalAlpha = 1; return;
     }
 
-    // Default pen — smooth bezier with pressure (speed → width)
+    // Default pen — quadratic Bezier for fluid, jitter-free strokes
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = alpha;
-    ctx.strokeStyle = color; ctx.lineWidth = size; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    if (last) { ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(pos.x, pos.y); ctx.stroke(); }
+    ctx.strokeStyle = color; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (last) {
+      // Speed-based line width: faster = slightly thinner (pressure simulation)
+      const dx = pos.x - last.x, dy = pos.y - last.y;
+      const speed = Math.sqrt(dx * dx + dy * dy);
+      const pressureWidth = Math.max(size * 0.5, size - speed * 0.04);
+      ctx.lineWidth = pressureWidth;
+      // Use quadratic bezier through the midpoint for smoothness
+      const mx = (last.x + pos.x) / 2, my = (last.y + pos.y) / 2;
+      ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.quadraticCurveTo(last.x, last.y, mx, my); ctx.stroke();
+    }
     ctx.globalAlpha = 1;
   }, []);
 
@@ -587,7 +597,7 @@ export function CanvasOverlay({ sendMessage }: CanvasOverlayProps) {
       sendMessage?.({ type: 'draw_stroke', tool: 'stamp', x2: pos.x, y2: pos.y, emoji: stampEmoji, size: drawSize, opacity: drawOpacity });
       return;
     }
-    saveHistory(); isDrawingRef.current = true; lastPosRef.current = pos;
+    saveHistory(); isDrawingRef.current = true; lastPosRef.current = pos; prevPosRef.current = null;
   }, [isDrawingMode, drawTool, drawSize, stampEmoji, drawOpacity, saveHistory, sendMessage]);
 
   const draw = useCallback((e: React.MouseEvent | React.TouchEvent) => {
@@ -608,7 +618,7 @@ export function CanvasOverlay({ sendMessage }: CanvasOverlayProps) {
     lastPosRef.current = pos;
   }, [isDrawingMode, applyStroke, sendMessage, drawTool, drawColor, drawSize, drawOpacity]);
 
-  const stopDraw = useCallback(() => { isDrawingRef.current = false; lastPosRef.current = null; }, []);
+  const stopDraw = useCallback(() => { isDrawingRef.current = false; lastPosRef.current = null; prevPosRef.current = null; }, []);
 
   // Preserve drawing history when toggling drawing mode on/off
   // Only clear on explicit 'clear' action — not on mode toggle
@@ -656,7 +666,7 @@ export function CanvasOverlay({ sendMessage }: CanvasOverlayProps) {
         onMouseUp={stopDraw}
         onMouseLeave={handleMouseLeave}
         onTouchStart={startDraw}
-        onTouchMove={draw}
+        onTouchMove={draw} onTouchCancel={stopDraw}
         onTouchEnd={stopDraw}
       />
 
